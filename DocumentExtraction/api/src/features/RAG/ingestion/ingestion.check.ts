@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import type { ParsedPage } from "../../parsing/types.js";
 import { chunkPages } from "./chunker.js";
+import { EMBED_BATCH_SIZE, EMBED_DIMENSIONS, embed } from "./embedder.js";
 
 /**
  * The chunk invariant. If this fails, every citation downstream highlights
@@ -40,10 +41,13 @@ function checkChunkInvariant() {
  * nomic-embed-text pulled.
  */
 async function checkEmbedAlignment() {
-  // TODO: embed() more texts than EMBED_BATCH_SIZE (e.g. 40).
-  // TODO: assert vectors.length === texts.length.
-  // TODO: assert every vector's length === EMBED_DIMENSIONS.
+  const texts = Array.from({ length: EMBED_BATCH_SIZE + 8 }, (_, i) => `passage ${i}`);
+  const vectors = await embed(texts);
+
+  assert.equal(vectors.length, texts.length);
+  assert.ok(vectors.every((v) => v.length === EMBED_DIMENSIONS));
+  console.log(`embed alignment ok (${vectors.length} vectors)`);
 }
 
 checkChunkInvariant();
-// TODO: then await checkEmbedAlignment().
+await checkEmbedAlignment();

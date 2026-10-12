@@ -8,7 +8,7 @@ const OLLAMA_URL = "http://localhost:11434/api/chat";
  * surfaces in the document grid as if the parser had broken. Name the actual
  * failure instead — this is the most common way extraction stops working.
  */
-function describeNetworkError(error: unknown): string {
+export function describeNetworkError(error: unknown): string {
   const name = (error as { name?: string })?.name;
   if (name === "TimeoutError" || name === "AbortError") {
     return `Ollama did not respond within 120s. The model may still be loading — check \`ollama ps\`.`;

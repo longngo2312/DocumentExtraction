@@ -10,7 +10,11 @@
 
 import type { PageSpans } from "../../extraction/models/extraction.model.js";
 import { groupIntoLines } from "../../extraction/utils/resolveQuote.util.js";
-import type { NormalizedBox, ParsedPage, ParsedSpan } from "../../parsing/types.js";
+import type {
+  NormalizedBox,
+  ParsedPage,
+  ParsedSpan,
+} from "../../parsing/types.js";
 
 /**
  * One passage, ready to insert into document_chunks and embed.
@@ -73,23 +77,13 @@ export function chunkPages(
   return chunks;
 }
 
-/**
- * Where the next window begins: step back CHUNK_OVERLAP_CHARS from `end`, then
- * forward to the next word so the chunk doesn't open mid-word.
- */
 function nextStart(text: string, start: number, end: number): number {
   const back = Math.max(end - CHUNK_OVERLAP_CHARS, start + 1);
   const ws = text.slice(back, end).search(/\s/);
   return ws === -1 ? end : back + ws + 1;
 }
 
-/**
- * Best end offset for a chunk starting at `start`, no later than
- * start + CHUNK_TARGET_CHARS. A chunk that starts or ends mid-sentence embeds
- * badly and reads worse when cited.
- */
 export function findBoundary(text: string, start: number): number {
-  // ponytail: "Dr. " / "e.g. " count as sentence ends; fine for retrieval chunks.
   const separators = [["\n\n"], ["\n"], [". ", "? ", "! "], [" "], [""]];
   const limit = Math.min(start + CHUNK_TARGET_CHARS, text.length);
   if (limit === text.length) return limit;
