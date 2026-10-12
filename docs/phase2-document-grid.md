@@ -199,7 +199,7 @@ Page owns state and data-fetching; `RenderDocuments` owns the JSX.
 ## Verify when done
 
 ```bash
-cd DocumentExtraction/frontend && npx tsc -b && npm run lint
+cd frontend && npx tsc -b && npm run lint
 ```
 
 `vite.config.ts(8,7)` babel error and the 4 errors in `SchemaDetailPage` /
