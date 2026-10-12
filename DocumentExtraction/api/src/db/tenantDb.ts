@@ -97,7 +97,15 @@ export function openTenantDB(tenantDBPath: string) {
             input_chars  INTEGER NOT NULL,
             generated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        
+
+        -- document_chunks: one row per RAG passage; SQLite is the source of truth,
+        -- Qdrant holds only vectors. See docs/phase6-rag, Stage 1.
+        -- TODO: columns: id, document_id (FK, ON DELETE CASCADE), chunk_index,
+        --       page, text, char_start, char_end (page-local), span_ids (JSON),
+        --       boxes (JSON), token_estimate, embed_model, embedded_at
+        -- TODO: UNIQUE(document_id, chunk_index)
+        -- TODO: index on document_id
+
     `, //pages_json` is `JSON.stringify(result.pages)
   );
   return db;
