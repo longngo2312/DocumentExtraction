@@ -50,12 +50,16 @@ interface SchemaCardGridProps {
   schemas: DocumentSchema[];
   onDelete: (id: number) => void;
   loading?: boolean;
+  /** The dashboard shows a preview of the collection, not the collection
+   *  itself, so it leaves the "start one" tile to the Schemas page. */
+  showNew?: boolean;
 }
 
 export default function SchemaCardGrid({
   schemas,
   onDelete,
   loading = false,
+  showNew = true,
 }: SchemaCardGridProps) {
   const navigate = useNavigate();
 
@@ -73,7 +77,7 @@ export default function SchemaCardGrid({
 
   return (
     <Box sx={CARD_GRID}>
-      <NewItemCard to="/schemas/new" label="New schema" />
+      {showNew && <NewItemCard to="/schemas/new" label="New schema" />}
 
       {schemas.map((schema) => (
         <ContentCard

@@ -37,15 +37,19 @@ function previewFor(mimeType: string) {
 interface DocumentCardGridProps {
   documents: DocumentListItem[];
   onDelete: (document: DocumentListItem) => void;
+  /** The dashboard shows a preview of the collection, not the collection
+   *  itself, so it leaves the "start one" tile to the Documents page. */
+  showNew?: boolean;
 }
 
 export default function DocumentCardGrid({
   documents,
   onDelete,
+  showNew = true,
 }: DocumentCardGridProps) {
   return (
     <Box sx={CARD_GRID}>
-      <NewItemCard to="/upload" label="Upload document" />
+      {showNew && <NewItemCard to="/upload" label="Upload document" />}
 
       {documents.map((document) => {
         const preview = previewFor(document.mime_type);

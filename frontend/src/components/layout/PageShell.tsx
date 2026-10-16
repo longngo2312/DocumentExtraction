@@ -36,6 +36,9 @@ export default function PageShell({
         display: "flex",
         flexDirection: "column",
         width: "100%",
+        // The content panel clips rather than grows, so the page scrolls
+        // inside it — the header row scrolls with the content, as it should.
+        overflowY: "auto",
       }}
     >
       <Stack

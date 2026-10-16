@@ -1,4 +1,7 @@
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import HistoryIcon from "@mui/icons-material/History";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import SchemaOutlinedIcon from "@mui/icons-material/SchemaOutlined";
 import {
   Alert,
   Box,
@@ -11,7 +14,7 @@ import {
   Tabs,
   Typography,
 } from "@mui/material";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import DocumentCardGrid from "../components/document/DocumentCardGrid";
 import Composer from "../components/query/Composer";
@@ -29,6 +32,7 @@ export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
   const [tab, setTab] = useState<DashboardTab>("documents");
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const documents = useDocumentStore((s) => s.documents);
   const documentsLoading = useDocumentStore((s) => s.loading);
@@ -72,7 +76,11 @@ export default function DashboardPage() {
             pb: { xs: 4, md: 6 },
           }}
         >
-          <Typography variant="h3" component="h1">
+          <Typography
+            variant="h2"
+            component="h1"
+            sx={{ fontSize: { xs: "1.75rem", sm: "2.125rem", md: "2.5rem" } }}
+          >
             What&apos;s on your mind
             {user?.username && (
               <>
@@ -85,9 +93,9 @@ export default function DashboardPage() {
             ?
           </Typography>
           <Typography
-            variant="body1"
+            variant="body2"
             color="text.secondary"
-            sx={{ maxWidth: 560 }}
+            sx={{ maxWidth: 520 }}
           >
             Ask across everything you have extracted, or drop in a new document
             to pull its values out.
@@ -105,9 +113,43 @@ export default function DashboardPage() {
           </Box>
         </Stack>
 
+        {/* The scroll affordance from the reference: a quiet label pointing at
+            what is below the fold. It scrolls rather than merely hinting. */}
+        <Stack
+          component="button"
+          onClick={() =>
+            panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+          aria-label="Jump to recent work"
+          sx={{
+            display: "flex",
+            // Label over chevron, as in the reference — the arrow points at
+            // what is below, so it belongs under the word, not beside it.
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 0,
+            mx: "auto",
+            mb: 3,
+            px: 1.5,
+            py: 0.5,
+            border: 0,
+            borderRadius: 2,
+            bgcolor: "transparent",
+            color: "text.disabled",
+            cursor: "pointer",
+            "&:hover": { color: "text.secondary" },
+          }}
+        >
+          <Typography variant="overline" sx={{ color: "inherit" }}>
+            Recent
+          </Typography>
+          <KeyboardArrowDownIcon fontSize="small" />
+        </Stack>
+
         <Paper
+          ref={panelRef}
           variant="outlined"
-          sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, mb: 4 }}
+          sx={{ p: { xs: 2, sm: 3 }, borderRadius: 4, mb: 4 }}
         >
           <Stack
             direction="row"
@@ -119,14 +161,45 @@ export default function DashboardPage() {
               flexWrap: "wrap",
             }}
           >
+            {/* Pill tabs, as in the reference — still MUI Tabs underneath, so
+                arrow-key roving and the tab/panel semantics come for free. */}
             <Tabs
               value={tab}
               onChange={(_event, value) => setTab(value as DashboardTab)}
               aria-label="Recent work"
-              sx={{ minHeight: 36, "& .MuiTab-root": { minHeight: 36 } }}
+              sx={{
+                minHeight: 0,
+                "& .MuiTabs-indicator": { display: "none" },
+                "& .MuiTabs-flexContainer": { gap: 0.5 },
+                "& .MuiTab-root": {
+                  minHeight: 36,
+                  minWidth: 0,
+                  px: 2,
+                  gap: 0.75,
+                  borderRadius: 999,
+                  textTransform: "none",
+                  fontWeight: 600,
+                  fontSize: "0.8125rem",
+                  color: "text.secondary",
+                },
+                "& .Mui-selected": {
+                  bgcolor: "surface.activeRow",
+                  color: "primary.main",
+                },
+              }}
             >
-              <Tab value="documents" label="Recent documents" />
-              <Tab value="schemas" label="Schemas" />
+              <Tab
+                value="documents"
+                label="Recent documents"
+                icon={<HistoryIcon fontSize="small" />}
+                iconPosition="start"
+              />
+              <Tab
+                value="schemas"
+                label="Schemas"
+                icon={<SchemaOutlinedIcon fontSize="small" />}
+                iconPosition="start"
+              />
             </Tabs>
 
             <Button
@@ -163,12 +236,14 @@ export default function DashboardPage() {
             <DocumentCardGrid
               documents={recentDocuments}
               onDelete={(document) => removeDocument(document.id)}
+              showNew={false}
             />
           ) : (
             <SchemaCardGrid
               schemas={recentSchemas}
               onDelete={removeSchema}
               loading={schemasLoading}
+              showNew={false}
             />
           )}
         </Paper>

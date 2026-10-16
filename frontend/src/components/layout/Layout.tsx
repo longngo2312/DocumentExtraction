@@ -54,7 +54,9 @@ export default function Layout() {
   const width = collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100%" }}>
+    // The shell ground. The rail sits directly on it and the content panel
+    // floats above it, so this colour is the gap you see between the two.
+    <Box sx={{ display: "flex", minHeight: "100%", bgcolor: "surface.sunken" }}>
       <Box
         component="a"
         href="#main"
@@ -85,6 +87,9 @@ export default function Layout() {
             "& .MuiDrawer-paper": {
               width,
               boxSizing: "border-box",
+              // The rail has no surface of its own — it sits on the shell
+              // ground, and the content panel is the only raised thing.
+              bgcolor: "transparent",
               borderRight: 0,
               transition: theme.transitions.create("width", {
                 duration: theme.transitions.duration.shorter,
@@ -155,6 +160,10 @@ export default function Layout() {
 
         {/* No Container here — PageShell owns page width. Nesting both is what
             made every page doubly padded and doubly constrained. */}
+        {/* The content panel: a rounded screen inset from the window, with
+            the shell ground showing around it. It owns the scroll, which is
+            why every page inside it fills rather than grows. Full-bleed on a
+            phone — an inset frame there is just lost width. */}
         <Box
           component="main"
           id="main"
@@ -163,6 +172,13 @@ export default function Layout() {
             minHeight: 0,
             display: "flex",
             flexDirection: "column",
+            overflow: "hidden",
+            bgcolor: "background.default",
+            m: { xs: 0, md: 1.5 },
+            ml: { md: 0 },
+            borderRadius: { xs: 0, md: 3 },
+            border: { xs: 0, md: 1 },
+            borderColor: { md: "divider" },
           }}
         >
           <Outlet />
