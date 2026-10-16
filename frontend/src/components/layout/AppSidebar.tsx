@@ -12,6 +12,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { useEffect, useRef } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { useDocumentStore } from "../../stores/documentStore";
 import Brand from "./Brand";
@@ -48,9 +49,20 @@ export default function AppSidebar({
   showCollapseToggle = true,
 }: AppSidebarProps) {
   const documents = useDocumentStore((s) => s.documents);
+  const fetchDocuments = useDocumentStore((s) => s.fetchDocuments);
 
-  // Whatever the store already holds — the rail does not fetch on its own, so
-  // it costs nothing on pages that never load documents.
+  // The rail is on every page, including the ones that never load documents
+  // themselves — so it fills the store once rather than showing an empty
+  // Recents everywhere but the dashboard. The ref keeps StrictMode's
+  // double-invoke from firing the request twice in development.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!asked.current && documents.length === 0) {
+      asked.current = true;
+      fetchDocuments();
+    }
+  }, [documents.length, fetchDocuments]);
+
   const recents = [...documents]
     .sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at))
     .slice(0, RECENTS_COUNT);
@@ -142,7 +154,9 @@ export default function AppSidebar({
         ))}
       </List>
 
-      {!collapsed && recents.length > 0 && (
+      {/* The heading stays put whether or not there is anything under it —
+          a section that vanishes when empty reads as a layout glitch. */}
+      {!collapsed && (
         <Box sx={{ px: 2.25, pt: 3, minHeight: 0, overflow: "auto" }}>
           <Typography
             variant="overline"
@@ -153,6 +167,11 @@ export default function AppSidebar({
             Recents
           </Typography>
           <Stack spacing={0.25}>
+            {recents.length === 0 && (
+              <Typography variant="caption" color="text.disabled" sx={{ py: 0.5 }}>
+                No documents yet
+              </Typography>
+            )}
             {recents.map((document) => (
               <Typography
                 key={document.id}

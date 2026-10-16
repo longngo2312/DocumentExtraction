@@ -82,44 +82,56 @@ const theme = createTheme({
     },
     dark: {
       palette: {
-        // The accent lightens in dark mode: #2563EB as text on the #0F172A
-        // canvas is 3.5:1, which fails. #60A5FA is 7.0:1, so every default
-        // that paints with `primary.main` — links, text buttons, the active
-        // nav item, focus rings — is readable without per-component branching.
-        // The cost is that filled buttons take dark labels instead of white
-        // (#0F172A on #60A5FA is 7.0:1; white would be 2.6:1).
+        // Built from the five given colours: #000000, #0000FF, #56AAFF,
+        // #FFFFFF, #626568. Five cannot cover a UI that needs a canvas, a
+        // raised card, a recessed rail and three tiers of text, so the
+        // near-blacks and the mid greys below are steps between the given
+        // ones — never a new hue.
+        //
+        // #56AAFF is the accent: 8.1:1 as text on the canvas, and it carries
+        // a black label at 8.6:1 when it is a button fill. #0000FF cannot be
+        // text on black (2.3:1), so it appears only as a fill under white
+        // (8.6:1) and as the selection wash — see `secondary` and
+        // `surface.activeRow`.
         primary: {
-          main: "#60A5FA",
-          light: "#93C5FD",
-          dark: "#3B82F6",
-          contrastText: "#0F172A",
+          main: "#56AAFF",
+          light: "#8FC6FF",
+          dark: "#2E90F5",
+          contrastText: "#000000",
         },
+        // The one place the pure blue shows at full strength: a filled chip
+        // or button with a white label.
         secondary: {
-          main: "#94A3B8",
-          light: "#CBD5E1",
-          dark: "#64748B",
-          contrastText: "#0F172A",
+          main: "#0000FF",
+          light: "#4444FF",
+          dark: "#0000CC",
+          contrastText: "#FFFFFF",
         },
         success: { main: "#4ADE80", light: "#86EFAC", dark: "#22C55E" },
         error: { main: "#F87171", light: "#FCA5A5", dark: "#EF4444" },
         warning: { main: "#FBBF24", light: "#FCD34D", dark: "#F59E0B" },
-        info: { main: "#60A5FA", light: "#93C5FD", dark: "#3B82F6" },
-        background: { default: "#0F172A", paper: "#1E293B" },
+        info: { main: "#56AAFF", light: "#8FC6FF", dark: "#2E90F5" },
+        background: { default: "#0A0B0C", paper: "#141618" },
         surface: {
-          // Note the inversion: in light, `sunken` is darker than the canvas;
-          // here it is darker too — but `paper` is *lighter* than the canvas.
-          // "Recessed" is the constant, not lightness.
-          sunken: "#0B1120",
+          // Pure black is the recessed ground — the rail and the table heads
+          // sit below the canvas rather than above it.
+          sunken: "#000000",
           // The viewer desk is the darkest ground in the app so a white PDF
           // page reads as lit. HighlightOverlay's `mixBlendMode: multiply`
           // composites against the rendered page, not against this ground.
-          viewer: "#020617",
-          activeRow: "#172554",
+          viewer: "#000000",
+          // #0000FF sunk into black. The accent still reads 7.8:1 on it, so
+          // the active nav pill and the selected row stay legible.
+          activeRow: "#0A0A33",
           pendingRow: "#422006",
         },
-        // #94A3B8 on #0F172A is 7.4:1 — the tightest text pair in the scheme.
-        text: { primary: "#F1F5F9", secondary: "#94A3B8", disabled: "#64748B" },
-        divider: "#334155",
+        // #626568 is 3.3:1 on the canvas — too low for body text, so it is
+        // the disabled tier and a lighter step of it carries secondary text
+        // at 7.1:1.
+        text: { primary: "#FFFFFF", secondary: "#9A9DA1", disabled: "#626568" },
+        // #626568 darkened: at full strength a hairline of it reads as a
+        // drawn line rather than an edge.
+        divider: "#2A2C2E",
       },
     },
   },
