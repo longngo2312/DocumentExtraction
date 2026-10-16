@@ -6,6 +6,7 @@ import {
   Routes,
 } from "react-router-dom";
 import Layout from "../components/layout/Layout";
+import DashboardPage from "../pages/DashboardPage";
 import DocumentGridPage from "../pages/DocumentGridPage";
 import ExtractedDocumentPage from "../pages/ExtractedDocumentPage";
 import LoginPage from "../pages/LoginPage";
@@ -31,6 +32,7 @@ function AppRouter() {
         <Route path="/register" element={<RegisterPage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/schemas" element={<SchemaBuilderPage />} />
             {/* Static segment first so "new" can't be read as an :id. */}
             <Route path="/schemas/new" element={<SchemaEditorPage mode="create" />} />
@@ -44,7 +46,7 @@ function AppRouter() {
             <Route path="/documents/:id" element={<ExtractedDocumentPage />} />
             <Route path="/query" element={<QueryPage />} />
             <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/" element={<Navigate to="/schemas" replace />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             {/* Without this an unknown path renders a completely blank page. */}
             <Route path="*" element={<NotFoundPage />} />
           </Route>

@@ -33,7 +33,6 @@ export default function Brand({ size = 32, showWordmark = true }: BrandProps) {
         <Typography
           variant="subtitle1"
           sx={{
-            fontFamily: '"Space Grotesk", "DM Sans", sans-serif',
             fontWeight: 600,
             letterSpacing: "-0.02em",
             whiteSpace: "nowrap",

@@ -38,22 +38,15 @@ export default function NavItem({
         color: "text.secondary",
         position: "relative",
         "&:hover": { bgcolor: "action.hover" },
+        // A filled pill, not a leading bar: the fill, the accent colour and
+        // the weight are three signals, so the state never rests on colour
+        // alone for anyone who cannot see it.
         "&.active": {
           bgcolor: "surface.activeRow",
           color: "primary.main",
           "& .MuiListItemIcon-root": { color: "primary.main" },
           "& .MuiListItemText-primary": { fontWeight: 600 },
-          // Leading bar — the actual active signal. Weight alone reads as noise.
-          "&::before": {
-            content: '""',
-            position: "absolute",
-            left: 0,
-            top: 8,
-            bottom: 8,
-            width: 3,
-            borderRadius: 3,
-            bgcolor: "primary.main",
-          },
+          "&:hover": { bgcolor: "surface.activeRow" },
         },
       }}
     >

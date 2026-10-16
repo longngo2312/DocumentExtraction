@@ -1,12 +1,27 @@
-import { Alert, Box, CircularProgress, Paper } from "@mui/material";
+import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+import VerticalSplitOutlinedIcon from "@mui/icons-material/VerticalSplitOutlined";
+import {
+  Alert,
+  Box,
+  CircularProgress,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+} from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { getReview, saveReview } from "../api/documents";
 import ReviewPanel from "../components/extraction/ReviewPanel";
+import DocumentStatusChip from "../components/document/DocumentStatusChip";
 import type { SplitPaneTab } from "../components/layout/SplitPane";
 import SplitPane from "../components/layout/SplitPane";
+import WorkspaceTopBar from "../components/layout/WorkspaceTopBar";
 import DocumentViewerPanel from "../components/viewer/DocumentViewerPanel";
 import type { ActiveQuote, ReviewField, ReviewPayload } from "../types";
+
+/** Which panes the workspace shows on a wide screen. */
+type Pane = "split" | "document" | "values";
 
 export default function ExtractedDocumentPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +49,7 @@ export default function ExtractedDocumentPage() {
   const [mobileTab, setMobileTab] = useState<SplitPaneTab>(
     incomingQuote ? "left" : "right",
   );
+  const [pane, setPane] = useState<Pane>("split");
 
   const load = useCallback(() => {
     // Every setState sits inside a .then so none of them run synchronously
@@ -128,48 +144,99 @@ export default function ExtractedDocumentPage() {
     payload.fields.find((field) => field.column_id === activeQuote?.columnId) ??
     null;
 
+  const viewer = (
+    <DocumentViewerPanel
+      document={payload.document}
+      pages={payload.pages}
+      activeQuote={activeQuote}
+      fallbackValue={activeField?.value_text ?? null}
+    />
+  );
+
+  const review = (
+    <ReviewPanel
+      document={payload.document}
+      fields={payload.fields}
+      summary={payload.summary}
+      edits={edits}
+      activeColumnId={activeQuote?.columnId ?? null}
+      saving={saving}
+      saveError={saveError}
+      onQuoteClick={handleQuoteClick}
+      onSetValue={handleSetValue}
+      onSave={handleSave}
+    />
+  );
+
   return (
-    <Paper
-      variant="outlined"
+    <Box
       sx={{
         flexGrow: 1,
         minHeight: 0,
-        overflow: "hidden",
-        borderRadius: 2,
-        boxShadow: 1,
-        border: "1px solid",
-        borderColor: "divider",
-        m: { xs: 1.5, sm: 2 },
+        display: "flex",
+        flexDirection: "column",
       }}
     >
-      <SplitPane
-        leftLabel="Document"
-        rightLabel="Extracted values"
-        mobileTab={mobileTab}
-        onMobileTabChange={setMobileTab}
-        left={
-          <DocumentViewerPanel
-            document={payload.document}
-            pages={payload.pages}
-            activeQuote={activeQuote}
-            fallbackValue={activeField?.value_text ?? null}
-          />
+      <WorkspaceTopBar
+        backTo="/documents"
+        backLabel="Back to documents"
+        title={payload.document.filename}
+        subtitle={payload.document.schema_name}
+        center={
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={pane}
+            onChange={(_event, value) => {
+              // Null arrives when the active button is re-clicked.
+              if (value) setPane(value as Pane);
+            }}
+            aria-label="Panes"
+          >
+            <Tooltip title="Document only">
+              <ToggleButton value="document" aria-label="Document only">
+                <DescriptionOutlinedIcon fontSize="small" />
+              </ToggleButton>
+            </Tooltip>
+            <Tooltip title="Document and values">
+              <ToggleButton value="split" aria-label="Document and values">
+                <VerticalSplitOutlinedIcon fontSize="small" />
+              </ToggleButton>
+            </Tooltip>
+            <Tooltip title="Values only">
+              <ToggleButton value="values" aria-label="Values only">
+                <FactCheckOutlinedIcon fontSize="small" />
+              </ToggleButton>
+            </Tooltip>
+          </ToggleButtonGroup>
         }
-        right={
-          <ReviewPanel
-            document={payload.document}
-            fields={payload.fields}
-            summary={payload.summary}
-            edits={edits}
-            activeColumnId={activeQuote?.columnId ?? null}
-            saving={saving}
-            saveError={saveError}
-            onQuoteClick={handleQuoteClick}
-            onSetValue={handleSetValue}
-            onSave={handleSave}
-          />
-        }
+        actions={<DocumentStatusChip status={payload.document.status} />}
       />
-    </Paper>
+
+      {/* Full-bleed: a workspace gets the whole window, so there is no card
+          margin here. The panes carry their own grounds and the divider. */}
+      <Box sx={{ flexGrow: 1, minHeight: 0, display: "flex" }}>
+        {pane === "document" && (
+          <Box sx={{ flexGrow: 1, minWidth: 0, bgcolor: "surface.viewer" }}>
+            {viewer}
+          </Box>
+        )}
+        {pane === "values" && (
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>{review}</Box>
+        )}
+        {pane === "split" && (
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <SplitPane
+              leftLabel="Document"
+              rightLabel="Extracted values"
+              mobileTab={mobileTab}
+              onMobileTabChange={setMobileTab}
+              left={viewer}
+              right={review}
+            />
+          </Box>
+        )}
+      </Box>
+    </Box>
   );
 }
