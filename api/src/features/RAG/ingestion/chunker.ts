@@ -20,16 +20,12 @@ import type {
  * One passage, ready to insert into document_chunks and embed.
  */
 export interface Chunk {
-  /** Ordinal within the document, 0-based, runs across pages. */
   chunkIndex: number;
   page: number;
-  /** The exact slice, untrimmed. */
   text: string;
-  /** Page-local, half-open. */
   charStart: number;
   charEnd: number;
   spanIds: number[];
-  /** One rect per line; empty for office/plain. */
   boxes: NormalizedBox[];
   tokenEstimate: number;
 }
@@ -54,7 +50,6 @@ export function chunkPages(
       const end = findBoundary(text, start);
       const slice = text.slice(start, end);
 
-      // Test the trimmed length, store the untrimmed slice — the invariant.
       if (slice.trim().length >= CHUNK_MIN_CHARS) {
         const covered = coveredSpans(spansByPage.get(page.page), start, end);
         chunks.push({
@@ -101,24 +96,16 @@ export function findBoundary(text: string, start: number): number {
   return limit;
 }
 
-/**
- * Spans overlapping [charStart, charEnd) — where a chunk's highlight comes from.
- */
 export function coveredSpans(
   pageSpans: PageSpans | undefined,
   charStart: number,
   charEnd: number,
 ): ParsedSpan[] {
-  // Half-open overlap — same test as resolveQuote.util.ts.
   return (pageSpans?.spans ?? []).filter(
     (span) => span.start < charEnd && span.end > charStart,
   );
 }
 
-/**
- * Rough token count. Crude on purpose — it budgets the prompt, it does not
- * bill anyone.
- */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }

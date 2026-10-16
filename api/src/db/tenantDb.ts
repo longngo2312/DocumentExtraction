@@ -7,15 +7,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TENANTS_DIR = path.join(__dirname, "../../db/tenant");
 
 export function openTenantDB(tenantDBPath: string) {
+  fs.mkdirSync(path.dirname(tenantDBPath), { recursive: true });
   const db = new Database(tenantDBPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
   db.exec(
     // Create tables for each users
-    `   
-        DROP TABLE IF EXISTS extractedDocumentText;
- 
+    `    
         CREATE TABLE IF NOT EXISTS document_schemas (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             name         TEXT NOT NULL UNIQUE,
@@ -98,8 +97,6 @@ export function openTenantDB(tenantDBPath: string) {
             generated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
-        -- document_chunks: one row per RAG passage; SQLite is the source of truth,
-        -- Qdrant holds only vectors. See docs/phase6-rag, Stage 1.
         CREATE TABLE IF NOT EXISTS document_chunks (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             document_id    INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -127,9 +124,6 @@ export function tenantDBPath(userId: number): string {
 }
 
 export function provisionTenantDB(userId: number): string {
-  if (!fs.existsSync(TENANTS_DIR)) {
-    fs.mkdirSync(TENANTS_DIR, { recursive: true });
-  }
   const dbPath = tenantDBPath(userId);
   openTenantDB(dbPath);
   return dbPath;
