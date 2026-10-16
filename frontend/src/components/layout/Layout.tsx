@@ -54,9 +54,11 @@ export default function Layout() {
   const width = collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
 
   return (
-    // The shell ground. The rail sits directly on it and the content panel
-    // floats above it, so this colour is the gap you see between the two.
-    <Box sx={{ display: "flex", minHeight: "100%", bgcolor: "surface.sunken" }}>
+    // Exactly one viewport tall and clipped, so the shell itself can never
+    // scroll: pages stay put and only their contents move. `dvh` rather than
+    // `vh` because mobile browser chrome makes `vh` taller than what you can
+    // actually see, which would push the bottom edge off-screen.
+    <Box sx={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
       <Box
         component="a"
         href="#main"
@@ -87,9 +89,6 @@ export default function Layout() {
             "& .MuiDrawer-paper": {
               width,
               boxSizing: "border-box",
-              // The rail has no surface of its own — it sits on the shell
-              // ground, and the content panel is the only raised thing.
-              bgcolor: "transparent",
               borderRight: 0,
               transition: theme.transitions.create("width", {
                 duration: theme.transitions.duration.shorter,
@@ -128,7 +127,10 @@ export default function Layout() {
           minWidth: 0,
           display: "flex",
           flexDirection: "column",
-          minHeight: "100%",
+          // Not `minHeight: 100%` — that lets a tall child grow the column
+          // past the viewport and drag the panel with it. Stretch gives it
+          // the full height already; this only permits it to shrink.
+          minHeight: 0,
         }}
       >
         {!isDesktop && (
@@ -160,10 +162,9 @@ export default function Layout() {
 
         {/* No Container here — PageShell owns page width. Nesting both is what
             made every page doubly padded and doubly constrained. */}
-        {/* The content panel: a rounded screen inset from the window, with
-            the shell ground showing around it. It owns the scroll, which is
-            why every page inside it fills rather than grows. Full-bleed on a
-            phone — an inset frame there is just lost width. */}
+        {/* Full-bleed, as every screen but the dashboard is: the rounded
+            inset panel belongs to that one page, not to the shell. This
+            clips rather than grows, so each page scrolls inside it. */}
         <Box
           component="main"
           id="main"
@@ -173,12 +174,6 @@ export default function Layout() {
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
-            bgcolor: "background.default",
-            m: { xs: 0, md: 1.5 },
-            ml: { md: 0 },
-            borderRadius: { xs: 0, md: 3 },
-            border: { xs: 0, md: 1 },
-            borderColor: { md: "divider" },
           }}
         >
           <Outlet />

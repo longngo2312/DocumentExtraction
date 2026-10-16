@@ -31,9 +31,14 @@ export default function NavItem({
       // title does not reliably announce — so label the link either way.
       aria-label={label}
       sx={{
-        minHeight: 44,
-        borderRadius: 1.5,
-        px: collapsed ? 1.5 : 1.75,
+        // A full pill when expanded, a rounded square when collapsed — at
+        // icon-only width a pill and a circle are indistinguishable, and the
+        // square reads as a button. 34px tall clears the 24px minimum target
+        // with room to spare while staying as tight as the reference.
+        minHeight: 34,
+        borderRadius: collapsed ? 1 : 999,
+        px: collapsed ? 0.75 : 1.5,
+        py: 0.5,
         justifyContent: collapsed ? "center" : "flex-start",
         color: "text.secondary",
         position: "relative",
@@ -53,9 +58,10 @@ export default function NavItem({
       <ListItemIcon
         sx={{
           minWidth: 0,
-          mr: collapsed ? 0 : 1.75,
+          mr: collapsed ? 0 : 1.25,
           color: "inherit",
           justifyContent: "center",
+          "& .MuiSvgIcon-root": { fontSize: 18 },
         }}
       >
         {icon}
@@ -63,7 +69,7 @@ export default function NavItem({
       {!collapsed && (
         <ListItemText
           primary={label}
-          slotProps={{ primary: { variant: "body2" } }}
+          slotProps={{ primary: { variant: "body2", fontWeight: 500 } }}
         />
       )}
     </ListItemButton>

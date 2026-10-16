@@ -19,8 +19,8 @@ import NavItem from "./NavItem";
 import ProfileMenu from "./ProfileMenu";
 
 /** Layout needs these to offset the content region — keep them here. */
-export const SIDEBAR_WIDTH = 248;
-export const SIDEBAR_WIDTH_COLLAPSED = 72;
+export const SIDEBAR_WIDTH = 240;
+export const SIDEBAR_WIDTH_COLLAPSED = 56;
 
 /** How many recent documents the rail lists before it stops. */
 const RECENTS_COUNT = 5;
@@ -56,7 +56,7 @@ export default function AppSidebar({
     .slice(0, RECENTS_COUNT);
 
   return (
-    <Stack sx={{ height: "100%", overflowX: "hidden" }}>
+    <Stack sx={{ height: "100%", overflowY: "auto", overflowX: "hidden" }}>
       <Stack
         direction="row"
         sx={{

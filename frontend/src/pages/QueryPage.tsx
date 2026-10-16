@@ -72,8 +72,28 @@ export default function QueryPage() {
         flexDirection: "column",
       }}
     >
-      <Box sx={{ flexGrow: 1, minHeight: 0, overflow: "auto" }}>
-        <Container maxWidth="md" sx={{ px: { xs: 2, sm: 3 }, py: 3 }}>
+      {/* The page's single scroll region — the transcript scrolls here,
+          inside the content panel, and nothing else on the page scrolls. */}
+      <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: "auto" }}>
+        <Container
+          maxWidth="md"
+          sx={{
+            px: { xs: 2, sm: 3 },
+            py: 3,
+            // Lets the empty state centre itself against the panel rather
+            // than sitting at the top of a short page.
+            minHeight: "100%",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {/* Scrolls away with the conversation — it is a caveat about the
+              answers, not permanent chrome worth a strip of every screen. */}
+          <Alert severity="info" variant="outlined" sx={{ mb: 3 }}>
+            Retrieval isn&apos;t wired up yet — answers are placeholders.
+            Citations link to real uploaded documents.
+          </Alert>
+
           {messages.length === 0 && !pending ? (
             <EmptyChatState onPick={handleSend} />
           ) : (
@@ -82,18 +102,11 @@ export default function QueryPage() {
         </Container>
       </Box>
 
-      {/* Pinned below the transcript, as in a chat client — the composer does
-          not scroll away with the conversation. */}
-      <Box
-        sx={{
-          flexShrink: 0,
-          borderTop: 1,
-          borderColor: "divider",
-          bgcolor: "background.default",
-        }}
-      >
-        <Container maxWidth="md" sx={{ px: { xs: 2, sm: 3 }, py: 2 }}>
-          <Stack spacing={1.5}>
+      {/* The composer floats on the panel rather than sitting on a full-bleed
+          bar — the transcript runs under it and keeps the panel's ground. */}
+      <Box sx={{ flexShrink: 0, px: { xs: 2, sm: 3 }, pt: 1, pb: 2 }}>
+        <Container maxWidth="md" disableGutters>
+          <Stack spacing={1}>
             {error && (
               <Alert severity="error" onClose={() => setError(null)}>
                 {error}
@@ -104,13 +117,8 @@ export default function QueryPage() {
               onSend={handleSend}
               pending={pending}
               autoFocus
-              placeholder="Ask about your documents…"
+              placeholder="Ask a follow-up…"
             />
-
-            <Alert severity="info" variant="outlined" sx={{ py: 0 }}>
-              Retrieval isn&apos;t wired up yet — answers are placeholders.
-              Citations link to real uploaded documents.
-            </Alert>
           </Stack>
         </Container>
       </Box>

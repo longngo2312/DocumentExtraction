@@ -1,3 +1,4 @@
+import AddIcon from "@mui/icons-material/Add";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import HistoryIcon from "@mui/icons-material/History";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
@@ -25,6 +26,13 @@ import { useSchemaStore } from "../stores/schemaStore";
 
 /** How many cards each dashboard tab shows before "Show all" takes over. */
 const PREVIEW_COUNT = 5;
+
+/**
+ * How much of the recent panel sits above the fold: its top padding plus the
+ * tab row, and nothing more. The hero is sized against this, so the panel
+ * always peeks by the same amount whatever the hero's own height works out to.
+ */
+const PANEL_PEEK = 90;
 
 type DashboardTab = "documents" | "schemas";
 
@@ -59,21 +67,76 @@ export default function DashboardPage() {
     .slice(0, PREVIEW_COUNT);
 
   const showAll = tab === "documents" ? "/documents" : "/schemas";
+  const isEmpty =
+    tab === "documents"
+      ? recentDocuments.length === 0
+      : recentSchemas.length === 0;
   const firstLoad =
     tab === "documents"
       ? documentsLoading && documents.length === 0
       : schemasLoading && schemas.length === 0;
 
   return (
-    <Box sx={{ flexGrow: 1, minHeight: 0, overflow: "auto" }}>
-      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+    // The dashboard is the one screen that floats: a recessed ground with a
+    // rounded panel inset on it. Every other page sits flat on the canvas, so
+    // this lives here rather than in the shell. Full-bleed on a phone — an
+    // inset frame there is just lost width.
+    <Box
+      sx={{
+        flexGrow: 1,
+        minHeight: 0,
+        display: "flex",
+        bgcolor: "surface.sunken",
+        // An even 8px gutter on every side, the left included — the card is
+        // inset from the rail, not flush against it.
+        p: { xs: 0, md: 1 },
+      }}
+    >
+      <Box
+        sx={{
+          flexGrow: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          // The card clips and stays put; the scroller inside it is what
+          // moves, so the rounded corners never crop a scrollbar.
+          overflow: "hidden",
+          bgcolor: "background.default",
+          border: { xs: 0, md: 1 },
+          borderColor: { md: "divider" },
+          borderRadius: { xs: 0, md: 2 },
+          boxShadow: { xs: 0, md: 3 },
+        }}
+      >
+        <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: "auto" }}>
+        {/* The hero takes the panel's height less the peek, so the recent
+            panel always starts just below the fold with only its tab row
+            showing. A direct child of the scroller, because that is the only
+            ancestor with a definite height for the percentage to resolve
+            against. */}
+        <Box
+          sx={{
+            minHeight: `calc(100% - ${PANEL_PEEK}px)`,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+        <Container
+          maxWidth="lg"
+          sx={{
+            px: { xs: 2, sm: 3 },
+            flexGrow: 1,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+          }}
+        >
         <Stack
           spacing={2}
           sx={{
             alignItems: "center",
             textAlign: "center",
-            pt: { xs: 6, md: 10 },
-            pb: { xs: 4, md: 6 },
+            py: { xs: 4, md: 6 },
           }}
         >
           <Typography
@@ -112,9 +175,11 @@ export default function DashboardPage() {
             />
           </Box>
         </Stack>
+        </Container>
 
         {/* The scroll affordance from the reference: a quiet label pointing at
-            what is below the fold. It scrolls rather than merely hinting. */}
+            what is below the fold. It scrolls rather than merely hinting.
+            Sits at the foot of the hero, directly above the peeking panel. */}
         <Stack
           component="button"
           onClick={() =>
@@ -129,7 +194,7 @@ export default function DashboardPage() {
             alignItems: "center",
             gap: 0,
             mx: "auto",
-            mb: 3,
+            mb: 2,
             px: 1.5,
             py: 0.5,
             border: 0,
@@ -145,11 +210,20 @@ export default function DashboardPage() {
           </Typography>
           <KeyboardArrowDownIcon fontSize="small" />
         </Stack>
+        </Box>
 
+        <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 }, pb: 2.5 }}>
         <Paper
           ref={panelRef}
           variant="outlined"
-          sx={{ p: { xs: 2, sm: 3 }, borderRadius: 4, mb: 4 }}
+          sx={{
+            py: 3,
+            px: { xs: 2, sm: 4.5 },
+            borderRadius: 2,
+            // Cast upward: the panel rises from below the fold, so the light
+            // it blocks is above it.
+            boxShadow: "0 -4px 32px rgba(0,0,0,0.3)",
+          }}
         >
           <Stack
             direction="row"
@@ -157,7 +231,7 @@ export default function DashboardPage() {
               alignItems: "center",
               justifyContent: "space-between",
               gap: 2,
-              mb: 2.5,
+              mb: 5,
               flexWrap: "wrap",
             }}
           >
@@ -172,19 +246,25 @@ export default function DashboardPage() {
                 "& .MuiTabs-indicator": { display: "none" },
                 "& .MuiTabs-flexContainer": { gap: 0.5 },
                 "& .MuiTab-root": {
-                  minHeight: 36,
+                  minHeight: 34,
                   minWidth: 0,
-                  px: 2,
-                  gap: 0.75,
-                  borderRadius: 999,
+                  px: 1.75,
+                  gap: 1,
+                  borderRadius: 1.5,
                   textTransform: "none",
-                  fontWeight: 600,
-                  fontSize: "0.8125rem",
+                  fontWeight: 500,
+                  fontSize: "0.875rem",
                   color: "text.secondary",
+                  // Transparent rather than absent, so gaining the selected
+                  // border does not nudge the row by a pixel.
+                  border: "1px solid transparent",
+                  "& .MuiSvgIcon-root": { fontSize: 16 },
+                  "&:hover": { color: "text.primary" },
                 },
                 "& .Mui-selected": {
                   bgcolor: "surface.activeRow",
                   color: "primary.main",
+                  borderColor: "primary.main",
                 },
               }}
             >
@@ -207,6 +287,7 @@ export default function DashboardPage() {
               to={showAll}
               endIcon={<ArrowForwardIcon />}
               size="small"
+              sx={{ fontWeight: 600, flexShrink: 0 }}
             >
               Show all
             </Button>
@@ -226,28 +307,65 @@ export default function DashboardPage() {
             </Alert>
           )}
 
-          {firstLoad ? (
-            <Stack direction="row" spacing={2}>
-              {[0, 1, 2].map((n) => (
-                <Skeleton key={n} variant="rounded" height={220} sx={{ flex: 1 }} />
-              ))}
-            </Stack>
-          ) : tab === "documents" ? (
-            <DocumentCardGrid
-              documents={recentDocuments}
-              onDelete={(document) => removeDocument(document.id)}
-              showNew={false}
-            />
-          ) : (
-            <SchemaCardGrid
-              schemas={recentSchemas}
-              onDelete={removeSchema}
-              loading={schemasLoading}
-              showNew={false}
-            />
-          )}
-        </Paper>
-      </Container>
+          {/* The panel keeps its shape whatever the state — loading, empty or
+              full. Without a floor the bar above collapses onto nothing the
+              first time someone signs in, which is exactly when it matters. */}
+          <Box sx={{ minHeight: 248 }}>
+            {firstLoad ? (
+              <Stack direction="row" spacing={2}>
+                {[0, 1, 2].map((n) => (
+                  <Skeleton
+                    key={n}
+                    variant="rounded"
+                    height={220}
+                    sx={{ flex: 1 }}
+                  />
+                ))}
+              </Stack>
+            ) : isEmpty ? (
+              <Stack
+                spacing={1.5}
+                sx={{
+                  alignItems: "center",
+                  justifyContent: "center",
+                  textAlign: "center",
+                  height: 248,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  {tab === "documents"
+                    ? "No documents yet."
+                    : "No schemas yet."}
+                </Typography>
+                <Button
+                  component={RouterLink}
+                  to={tab === "documents" ? "/upload" : "/schemas/new"}
+                  variant="outlined"
+                  size="small"
+                  startIcon={<AddIcon />}
+                >
+                  {tab === "documents" ? "Upload a document" : "New schema"}
+                </Button>
+              </Stack>
+            ) : tab === "documents" ? (
+              <DocumentCardGrid
+                documents={recentDocuments}
+                onDelete={(document) => removeDocument(document.id)}
+                showNew={false}
+              />
+            ) : (
+              <SchemaCardGrid
+                schemas={recentSchemas}
+                onDelete={removeSchema}
+                loading={schemasLoading}
+                showNew={false}
+              />
+            )}
+          </Box>
+          </Paper>
+        </Container>
+        </Box>
+      </Box>
     </Box>
   );
 }

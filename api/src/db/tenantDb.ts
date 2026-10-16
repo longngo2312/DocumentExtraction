@@ -116,6 +116,7 @@ export function openTenantDB(tenantDBPath: string) {
 
     `, //pages_json` is `JSON.stringify(result.pages)
   );
+
   return db;
 }
 
