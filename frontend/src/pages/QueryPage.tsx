@@ -1,25 +1,67 @@
-import { Alert, Box, Container, Stack } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import HistoryIcon from "@mui/icons-material/History";
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Container,
+  Popover,
+  Stack,
+  Typography,
+} from "@mui/material";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import {
+  Link as RouterLink,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import {
   askQuery,
+  deleteChatSession,
+  getChatSession,
   getQueryStatus,
+  listChatSessions,
+  type ChatSessionSummary,
   type QueryMessage,
   type QueryStatus,
 } from "../api/query";
 import ChatMessageList from "../components/query/ChatMessageList";
+import ChatSessionList from "../components/query/ChatSessionList";
 import Composer from "../components/query/Composer";
 import EmptyChatState from "../components/query/EmptyChatState";
 import SearchStatusBanner from "../components/query/SearchStatusBanner";
 
 /** How often to re-read the status while documents are being indexed. */
 const STATUS_POLL_MS = 5000;
+/** Recent chats offered on the empty screen; the rest are in the history menu. */
+const EMPTY_STATE_CHATS = 5;
 
+/**
+ * What a page hands this one in router state. Both are one-shot: `question`
+ * from the dashboard composer, `messages` from this page itself when a first
+ * answer creates a chat and the URL moves to it.
+ */
+interface Handoff {
+  question?: string;
+  messages?: QueryMessage[];
+}
+
+/**
+ * Owns what outlives a single chat — the search status and the session list —
+ * and renders the chat itself keyed by its id. A new key remounts ChatView
+ * with fresh state, so switching chats needs no reset logic at all.
+ */
 export default function QueryPage() {
-  const [messages, setMessages] = useState<QueryMessage[]>([]);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const params = useParams<{ sessionId?: string }>();
+  const sessionId = params.sessionId ? Number(params.sessionId) : null;
+  const navigate = useNavigate();
+
   const [status, setStatus] = useState<QueryStatus | null>(null);
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [historyAnchor, setHistoryAnchor] = useState<HTMLElement | null>(null);
 
   // Every setState sits in a .then, so none runs synchronously inside the
   // effects below.
@@ -31,9 +73,18 @@ export default function QueryPage() {
       .catch(() => setStatus(null));
   }, []);
 
+  const refreshSessions = useCallback(() => {
+    listChatSessions()
+      .then(setSessions)
+      .catch(() => {
+        /* the lists just stay as they were */
+      });
+  }, []);
+
   useEffect(() => {
     refreshStatus();
-  }, [refreshStatus]);
+    refreshSessions();
+  }, [refreshStatus, refreshSessions]);
 
   // Poll only while something is being indexed — that is the one state that
   // changes without the user doing anything.
@@ -43,66 +94,233 @@ export default function QueryPage() {
     return () => clearInterval(timer);
   }, [status?.indexing, refreshStatus]);
 
-  // The dashboard composer hands its question over in router state rather than
-  // answering it there, so the conversation starts in one place.
-  const location = useLocation();
-  const incoming = (location.state as { question?: string } | null)?.question;
+  const handleDelete = useCallback(
+    (id: number) => {
+      deleteChatSession(id)
+        .then(() => {
+          refreshSessions();
+          // Deleting the open chat leaves nothing to show — start fresh.
+          if (id === sessionId) navigate("/query", { replace: true });
+        })
+        .catch(() => refreshSessions());
+    },
+    [navigate, refreshSessions, sessionId],
+  );
 
-  // Mirrors `messages` so handleSend can read the history without taking it as
-  // a dependency — a new handleSend on every message would re-run the effect
-  // below and, but for its guard, resend the handed-over question.
-  const messagesRef = useRef<QueryMessage[]>([]);
+  const title =
+    sessionId === null
+      ? "New chat"
+      : (sessions.find((session) => session.id === sessionId)?.title ?? "Chat");
+
+  return (
+    <Box sx={{ flexGrow: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          gap: 1,
+          px: { xs: 1.5, sm: 2 },
+          py: 1,
+          borderBottom: 1,
+          borderColor: "divider",
+          flexShrink: 0,
+        }}
+      >
+        <Button
+          color="inherit"
+          startIcon={<HistoryIcon />}
+          endIcon={<ExpandMoreIcon />}
+          aria-haspopup="dialog"
+          aria-expanded={Boolean(historyAnchor)}
+          onClick={(event) => {
+            refreshSessions();
+            setHistoryAnchor(event.currentTarget);
+          }}
+          sx={{ minWidth: 0, maxWidth: { xs: "60%", sm: 420 }, fontWeight: 600 }}
+        >
+          {/* body2, not subtitle2: the theme uppercases subtitle2, and a chat
+              title is the user's own sentence. */}
+          <Typography
+            variant="body2"
+            noWrap
+            component="span"
+            title={title}
+            sx={{ fontWeight: 600 }}
+          >
+            {title}
+          </Typography>
+        </Button>
+        <Box sx={{ flexGrow: 1 }} />
+        <Button
+          component={RouterLink}
+          to="/query"
+          startIcon={<AddIcon />}
+          size="small"
+          variant="outlined"
+          disabled={sessionId === null}
+        >
+          New chat
+        </Button>
+      </Stack>
+
+      <Popover
+        open={Boolean(historyAnchor)}
+        anchorEl={historyAnchor}
+        onClose={() => setHistoryAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        slotProps={{
+          paper: { sx: { width: 360, maxWidth: "calc(100vw - 32px)", maxHeight: 440, p: 1 } },
+        }}
+      >
+        <Typography variant="overline" color="text.secondary" sx={{ px: 1 }}>
+          Chat history
+        </Typography>
+        <ChatSessionList
+          sessions={sessions}
+          activeId={sessionId}
+          onDelete={handleDelete}
+          onNavigate={() => setHistoryAnchor(null)}
+          emptyText="No past chats yet — your conversations will show up here."
+        />
+      </Popover>
+
+      <ChatView
+        key={sessionId ?? "new"}
+        sessionId={sessionId}
+        status={status}
+        onStatusChanged={refreshStatus}
+        recentSessions={sessions.slice(0, EMPTY_STATE_CHATS)}
+        onAnswered={refreshSessions}
+        onDeleteSession={handleDelete}
+      />
+    </Box>
+  );
+}
+
+interface ChatViewProps {
+  sessionId: number | null;
+  status: QueryStatus | null;
+  onStatusChanged: () => void;
+  recentSessions: ChatSessionSummary[];
+  onAnswered: () => void;
+  onDeleteSession: (id: number) => void;
+}
+
+/** One conversation. Mounted fresh for every chat — see QueryPage. */
+function ChatView({
+  sessionId,
+  status,
+  onStatusChanged,
+  recentSessions,
+  onAnswered,
+  onDeleteSession,
+}: ChatViewProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Read once, at mount — the handoff is cleared from history straight after.
+  const [handoff] = useState<Handoff>(() => (location.state as Handoff | null) ?? {});
+  const [messages, setMessages] = useState<QueryMessage[]>(() => handoff.messages ?? []);
+  const [loading, setLoading] = useState(sessionId !== null && !handoff.messages);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Router state survives a reload. Left in place, a reload would re-send the
+  // dashboard's question or show a stale snapshot, so it is consumed once.
+  useEffect(() => {
+    if (location.state) navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
+
+  // An existing chat opened by URL or from a list: fetch its transcript.
+  useEffect(() => {
+    if (!loading || sessionId === null) return;
+    let cancelled = false;
+    getChatSession(sessionId)
+      .then((session) => {
+        if (cancelled) return;
+        setMessages(session.messages);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : "This chat could not be opened");
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, sessionId]);
+
+  // Mirrors `messages` so the handoff to a newly created chat carries the
+  // whole transcript without handleSend depending on it.
+  const messagesRef = useRef<QueryMessage[]>(messages);
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
-  const handleSend = useCallback(async function handleSend(question: string) {
-    const userMessage: QueryMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: question,
-      citations: [],
+  // An answer can land after the user has moved to another chat. It is saved
+  // on the server either way; it just must not drag them back to this one.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
     };
-
-    // The transcript as the model should see it — read from the ref rather
-    // than from a state updater, which React may run twice.
-    const history = messagesRef.current;
-
-    setMessages((previous) => [...previous, userMessage]);
-    setPending(true);
-    setError(null);
-
-    try {
-      const answer = await askQuery(question, history);
-      setMessages((previous) => [...previous, answer]);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not reach the query service",
-      );
-    } finally {
-      setPending(false);
-    }
   }, []);
 
-  // Fire the handed-over question exactly once. Without the ref StrictMode's
+  const handleSend = useCallback(
+    async (question: string) => {
+      const userMessage: QueryMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: question,
+        citations: [],
+      };
+      setMessages((previous) => [...previous, userMessage]);
+      setPending(true);
+      setError(null);
+
+      try {
+        const answer = await askQuery(question, sessionId);
+        if (!alive.current) return;
+        onAnswered();
+
+        if (sessionId === null) {
+          // The first answer created the chat. Move to its URL so a reload or
+          // a shared link reopens it, handing the transcript over so it does
+          // not blink out and back while the new view mounts.
+          navigate(`/query/${answer.session_id}`, {
+            replace: true,
+            state: { messages: [...messagesRef.current, answer] } satisfies Handoff,
+          });
+        } else {
+          setMessages((previous) => [...previous, answer]);
+        }
+      } catch (err) {
+        if (!alive.current) return;
+        setError(err instanceof Error ? err.message : "Could not reach the query service");
+      } finally {
+        if (alive.current) setPending(false);
+      }
+    },
+    [navigate, onAnswered, sessionId],
+  );
+
+  // Fire the dashboard's question exactly once. Without the ref StrictMode's
   // double-invoke in development sends it twice.
-  const sentIncoming = useRef(false);
+  const sentHandoff = useRef(false);
   useEffect(() => {
-    if (incoming && !sentIncoming.current) {
-      sentIncoming.current = true;
-      handleSend(incoming);
+    if (handoff.question && !sentHandoff.current) {
+      sentHandoff.current = true;
+      handleSend(handoff.question);
     }
-  }, [incoming, handleSend]);
+  }, [handoff.question, handleSend]);
+
+  const isEmpty = messages.length === 0 && !pending && !loading;
 
   return (
-    <Box
-      sx={{
-        flexGrow: 1,
-        minHeight: 0,
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <>
       {/* The page's single scroll region — the transcript scrolls here,
           inside the content panel, and nothing else on the page scrolls. */}
       <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: "auto" }}>
@@ -122,12 +340,37 @@ export default function QueryPage() {
               search, not permanent chrome worth a strip of every screen. */}
           {status && (
             <Box sx={{ mb: 3 }}>
-              <SearchStatusBanner status={status} onChanged={refreshStatus} />
+              <SearchStatusBanner status={status} onChanged={onStatusChanged} />
             </Box>
           )}
 
-          {messages.length === 0 && !pending ? (
-            <EmptyChatState onPick={handleSend} />
+          {loading ? (
+            <Box sx={{ flexGrow: 1, display: "grid", placeItems: "center" }}>
+              <CircularProgress size={28} aria-label="Loading chat" />
+            </Box>
+          ) : loadError ? (
+            <Alert
+              severity="warning"
+              action={
+                <Button component={RouterLink} to="/query" color="inherit" size="small">
+                  New chat
+                </Button>
+              }
+            >
+              {loadError}
+            </Alert>
+          ) : isEmpty ? (
+            <>
+              <EmptyChatState onPick={handleSend} />
+              {recentSessions.length > 0 && (
+                <Box sx={{ width: "100%", maxWidth: 560, mx: "auto", mt: 1 }}>
+                  <Typography variant="overline" color="text.secondary" sx={{ px: 1 }}>
+                    Recent chats
+                  </Typography>
+                  <ChatSessionList sessions={recentSessions} onDelete={onDeleteSession} />
+                </Box>
+              )}
+            </>
           ) : (
             <ChatMessageList messages={messages} pending={pending} />
           )}
@@ -149,18 +392,17 @@ export default function QueryPage() {
               onSend={handleSend}
               pending={pending}
               // With the vector store down every question fails — but only
-              // after a model call. Better not to let one be asked.
-              disabled={status?.qdrant === false}
+              // after a model call. Better not to let one be asked. A chat that
+              // failed to open has nowhere to send to.
+              disabled={status?.qdrant === false || loading || Boolean(loadError)}
               autoFocus
               placeholder={
-                messages.length === 0
-                  ? "Ask about your documents…"
-                  : "Ask a follow-up…"
+                messages.length === 0 ? "Ask about your documents…" : "Ask a follow-up…"
               }
             />
           </Stack>
         </Container>
       </Box>
-    </Box>
+    </>
   );
 }

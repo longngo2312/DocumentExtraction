@@ -1,5 +1,6 @@
 import AddIcon from "@mui/icons-material/Add";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutlineOutlined";
 import HistoryIcon from "@mui/icons-material/History";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import SchemaOutlinedIcon from "@mui/icons-material/SchemaOutlined";
@@ -15,9 +16,15 @@ import {
   Tabs,
   Typography,
 } from "@mui/material";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
+import {
+  deleteChatSession,
+  listChatSessions,
+  type ChatSessionSummary,
+} from "../api/query";
 import DocumentCardGrid from "../components/document/DocumentCardGrid";
+import ChatSessionList from "../components/query/ChatSessionList";
 import Composer from "../components/query/Composer";
 import SchemaCardGrid from "../components/schema/SchemaCardGrid";
 import { useAuthStore } from "../stores/authStore";
@@ -34,7 +41,33 @@ const PREVIEW_COUNT = 5;
  */
 const PANEL_PEEK = 90;
 
-type DashboardTab = "documents" | "schemas";
+type DashboardTab = "documents" | "schemas" | "chats";
+
+/** Where "Show all" goes and what an empty tab offers, per tab. */
+const TAB_META: Record<
+  DashboardTab,
+  { showAll: string; empty: string; action: string; actionTo: string }
+> = {
+  documents: {
+    showAll: "/documents",
+    empty: "No documents yet.",
+    action: "Upload a document",
+    actionTo: "/upload",
+  },
+  schemas: {
+    showAll: "/schemas",
+    empty: "No schemas yet.",
+    action: "New schema",
+    actionTo: "/schemas/new",
+  },
+  // The query page holds the full history behind its header menu.
+  chats: {
+    showAll: "/query",
+    empty: "No chats yet.",
+    action: "Start a chat",
+    actionTo: "/query",
+  },
+};
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
@@ -53,10 +86,22 @@ export default function DashboardPage() {
   const fetchSchema = useSchemaStore((s) => s.fetchSchema);
   const removeSchema = useSchemaStore((s) => s.removeSchema);
 
+  const [chats, setChats] = useState<ChatSessionSummary[]>([]);
+  const [chatsLoading, setChatsLoading] = useState(true);
+  const refreshChats = useCallback(() => {
+    listChatSessions()
+      .then(setChats)
+      .catch(() => {
+        /* the tab just shows what it had */
+      })
+      .finally(() => setChatsLoading(false));
+  }, []);
+
   useEffect(() => {
     fetchDocuments();
     fetchSchema();
-  }, [fetchDocuments, fetchSchema]);
+    refreshChats();
+  }, [fetchDocuments, fetchSchema, refreshChats]);
 
   // Newest first, then trimmed — the dashboard is a glance, not the list page.
   const recentDocuments = [...documents]
@@ -66,15 +111,19 @@ export default function DashboardPage() {
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     .slice(0, PREVIEW_COUNT);
 
-  const showAll = tab === "documents" ? "/documents" : "/schemas";
-  const isEmpty =
-    tab === "documents"
-      ? recentDocuments.length === 0
-      : recentSchemas.length === 0;
-  const firstLoad =
-    tab === "documents"
-      ? documentsLoading && documents.length === 0
-      : schemasLoading && schemas.length === 0;
+  const recentChats = chats.slice(0, PREVIEW_COUNT);
+
+  const meta = TAB_META[tab];
+  const isEmpty = {
+    documents: recentDocuments.length === 0,
+    schemas: recentSchemas.length === 0,
+    chats: recentChats.length === 0,
+  }[tab];
+  const firstLoad = {
+    documents: documentsLoading && documents.length === 0,
+    schemas: schemasLoading && schemas.length === 0,
+    chats: chatsLoading && chats.length === 0,
+  }[tab];
 
   return (
     // The dashboard is the one screen that floats: a recessed ground with a
@@ -280,11 +329,17 @@ export default function DashboardPage() {
                 icon={<SchemaOutlinedIcon fontSize="small" />}
                 iconPosition="start"
               />
+              <Tab
+                value="chats"
+                label="Recent chats"
+                icon={<ChatBubbleOutlineIcon fontSize="small" />}
+                iconPosition="start"
+              />
             </Tabs>
 
             <Button
               component={RouterLink}
-              to={showAll}
+              to={meta.showAll}
               endIcon={<ArrowForwardIcon />}
               size="small"
               sx={{ fontWeight: 600, flexShrink: 0 }}
@@ -311,7 +366,13 @@ export default function DashboardPage() {
               full. Without a floor the bar above collapses onto nothing the
               first time someone signs in, which is exactly when it matters. */}
           <Box sx={{ minHeight: 248 }}>
-            {firstLoad ? (
+            {firstLoad && tab === "chats" ? (
+              <Stack spacing={1}>
+                {[0, 1, 2].map((n) => (
+                  <Skeleton key={n} variant="rounded" height={52} />
+                ))}
+              </Stack>
+            ) : firstLoad ? (
               <Stack direction="row" spacing={2}>
                 {[0, 1, 2].map((n) => (
                   <Skeleton
@@ -333,20 +394,25 @@ export default function DashboardPage() {
                 }}
               >
                 <Typography variant="body2" color="text.secondary">
-                  {tab === "documents"
-                    ? "No documents yet."
-                    : "No schemas yet."}
+                  {meta.empty}
                 </Typography>
                 <Button
                   component={RouterLink}
-                  to={tab === "documents" ? "/upload" : "/schemas/new"}
+                  to={meta.actionTo}
                   variant="outlined"
                   size="small"
                   startIcon={<AddIcon />}
                 >
-                  {tab === "documents" ? "Upload a document" : "New schema"}
+                  {meta.action}
                 </Button>
               </Stack>
+            ) : tab === "chats" ? (
+              <ChatSessionList
+                sessions={recentChats}
+                onDelete={(id) => {
+                  deleteChatSession(id).finally(refreshChats);
+                }}
+              />
             ) : tab === "documents" ? (
               <DocumentCardGrid
                 documents={recentDocuments}

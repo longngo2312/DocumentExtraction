@@ -45,6 +45,8 @@ function AppRouter() {
             <Route path="/documents" element={<DocumentGridPage />} />
             <Route path="/documents/:id" element={<ExtractedDocumentPage />} />
             <Route path="/query" element={<QueryPage />} />
+            {/* Each chat has a URL, so a reload or a shared link reopens it. */}
+            <Route path="/query/:sessionId" element={<QueryPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             {/* Without this an unknown path renders a completely blank page. */}

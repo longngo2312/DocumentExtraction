@@ -81,7 +81,9 @@ export default function ContentCard({
         </Box>
 
         <Box sx={{ p: 1.75, pr: 5 }}>
-          <Typography variant="subtitle2" noWrap title={title}>
+          {/* body2, not subtitle2: the theme uppercases subtitle2, and these
+              are filenames and names — the reader compares them as written. */}
+          <Typography variant="body2" noWrap title={title} sx={{ fontWeight: 600 }}>
             {title}
           </Typography>
           <Typography

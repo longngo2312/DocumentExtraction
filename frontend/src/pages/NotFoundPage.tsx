@@ -13,8 +13,13 @@ export default function NotFoundPage() {
         <Typography variant="body2" color="text.secondary">
           That page doesn&apos;t exist, or it moved.
         </Typography>
-        <Button component={RouterLink} to="/schemas" variant="contained" sx={{ mt: 1 }}>
-          Back to Schemas
+        <Button
+          component={RouterLink}
+          to="/dashboard"
+          variant="contained"
+          sx={{ mt: 1 }}
+        >
+          Back to Dashboard
         </Button>
       </Stack>
     </Box>

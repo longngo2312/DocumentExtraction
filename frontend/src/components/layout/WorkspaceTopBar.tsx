@@ -57,7 +57,9 @@ export default function WorkspaceTopBar({
           </IconButton>
         </Tooltip>
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="subtitle2" noWrap title={title}>
+          {/* body2, not subtitle2: the theme uppercases subtitle2, and this is
+              a filename — the reader compares it as written. */}
+          <Typography variant="body2" noWrap title={title} sx={{ fontWeight: 600 }}>
             {title}
           </Typography>
           {subtitle && (
