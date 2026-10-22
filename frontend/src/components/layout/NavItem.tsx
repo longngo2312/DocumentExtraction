@@ -69,7 +69,7 @@ export default function NavItem({
       {!collapsed && (
         <ListItemText
           primary={label}
-          slotProps={{ primary: { variant: "body2", fontWeight: 500 } }}
+          slotProps={{ primary: { variant: "body2", sx: { fontWeight: 500 } } }}
         />
       )}
     </ListItemButton>

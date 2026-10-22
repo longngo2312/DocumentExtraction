@@ -114,6 +114,28 @@ export function openTenantDB(tenantDBPath: string) {
         );
         CREATE INDEX IF NOT EXISTS idx_chunks_document ON document_chunks(document_id);
 
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            title       TEXT NOT NULL,               -- the first question, trimmed
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- The server's own record of the conversation. History for the next
+        -- answer is read from here, never from the client, so a client cannot
+        -- put words in the assistant's mouth.
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id     INTEGER NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+            role           TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+            content        TEXT NOT NULL,
+            -- A snapshot: the citations as they were verified when answered.
+            citations_json TEXT NOT NULL DEFAULT '[]',
+            ungrounded     INTEGER NOT NULL DEFAULT 0,
+            created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, id);
+
     `, //pages_json` is `JSON.stringify(result.pages)
   );
 

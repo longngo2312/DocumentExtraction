@@ -1,17 +1,24 @@
-import type { NormalizedBox } from "../types";
-import { getDocuments } from "./documents";
+import type { ActiveQuote, NormalizedBox } from "../types";
+import { apiFetch } from "./client";
 
 /**
- * A grounded span in a specific document. Shaped to line up with `ActiveQuote`
- * so a citation can drive the existing viewer highlight path with no new
- * highlight code: `boxes` null means the viewer falls back to quote search.
+ * A grounded span in a specific document — either a retrieved passage or a
+ * reviewed extracted value. Shaped to line up with `ActiveQuote` so a citation
+ * drives the existing viewer highlight path with no new highlight code.
  */
 export interface QueryCitation {
+  kind: "passage" | "value";
   document_id: number;
   filename: string;
   page: number;
   quote: string;
+  /** Page-local offsets. Null means the viewer searches for `quote` instead. */
+  char_start: number | null;
+  char_end: number | null;
+  /** Null for formats with no geometry — office files, plain text. */
   boxes: NormalizedBox[] | null;
+  /** Value citations only. */
+  column?: string;
 }
 
 export interface QueryMessage {
@@ -19,53 +26,88 @@ export interface QueryMessage {
   role: "user" | "assistant";
   content: string;
   citations: QueryCitation[];
+  /**
+   * The server found sources but the answer cites none of them. Shown as a
+   * warning rather than presented as a grounded answer.
+   */
+  ungrounded?: boolean;
+}
+
+export interface QueryStatus {
+  /** Whether the vector store is reachable at all. */
+  qdrant: boolean;
+  /** Documents that can be searched right now. */
+  searchable: number;
+  /** Documents being parsed or indexed — searchable shortly. */
+  indexing: number;
+  /** Parsed documents that are not searchable and have nothing queued. */
+  unindexed: number;
+}
+
+/** The stored answer, and the chat it was saved into. */
+export interface QueryAnswer extends QueryMessage {
+  role: "assistant";
+  session_id: number;
+}
+
+export interface ChatSessionSummary {
+  id: number;
+  title: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface ChatSession {
+  id: number;
+  title: string;
+  messages: QueryMessage[];
 }
 
 /**
- * Ask a question across the indexed documents.
- *
- * TODO(RAG): the body is a mock. Replace with
- *   apiFetch<QueryMessage>("/query", {
- *     method: "POST",
- *     body: JSON.stringify({ question, history }),
- *   })
- * once `api/src/features/RAG/` exposes a route. Backend target:
- *   POST /api/query { question, history?, document_ids? }
- *     -> { id, role: "assistant", content, citations }
- * Keep this signature identical so the swap is a one-line body change.
+ * Ask a question across the user's searchable documents. Without a session id
+ * the server starts a new chat and returns its id. No history is sent: the
+ * server reads the conversation from its own record of it.
  */
-export async function askQuery(
+export function askQuery(
   question: string,
-  history: QueryMessage[],
-): Promise<QueryMessage> {
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  sessionId: number | null,
+): Promise<QueryAnswer> {
+  return apiFetch<QueryAnswer>("/query", {
+    method: "POST",
+    body: JSON.stringify({ question, session_id: sessionId }),
+  });
+}
 
-  // Cite real uploaded documents so the deep-link path is genuinely exercised
-  // rather than pointing at ids that don't exist.
-  let citations: QueryCitation[] = [];
-  try {
-    const documents = await getDocuments();
-    citations = documents.slice(0, 2).map((document) => ({
-      document_id: document.id,
-      filename: document.filename,
-      page: 1,
-      quote: `Representative passage from ${document.filename}.`,
-      boxes: null,
-    }));
-  } catch {
-    // The mock must not fail just because the list call did.
-  }
+export function listChatSessions(): Promise<ChatSessionSummary[]> {
+  return apiFetch<ChatSessionSummary[]>("/query/sessions");
+}
 
-  const turn = history.filter((message) => message.role === "user").length + 1;
+export function getChatSession(id: number): Promise<ChatSession> {
+  return apiFetch<ChatSession>(`/query/sessions/${id}`);
+}
 
+export function deleteChatSession(id: number): Promise<void> {
+  return apiFetch<void>(`/query/sessions/${id}`, { method: "DELETE" });
+}
+
+export function getQueryStatus(): Promise<QueryStatus> {
+  return apiFetch<QueryStatus>("/query/status");
+}
+
+/** Queue every parsed-but-unsearchable document for indexing. */
+export function indexMissingDocuments(): Promise<{ enqueued: number }> {
+  return apiFetch<{ enqueued: number }>("/query/index", { method: "POST" });
+}
+
+/** The router state a citation hands the document page to highlight itself. */
+export function citationToQuote(citation: QueryCitation): ActiveQuote {
   return {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    content:
-      `This is a placeholder answer to “${question}” (turn ${turn}). The ` +
-      `retrieval backend is not wired up yet — api/src/features/RAG/ is still ` +
-      `scaffolding, so no real passages were searched. Citations below point ` +
-      `at real uploaded documents so the link-through works.`,
-    citations,
+    // No column owns a chat citation; -1 marks "not a field".
+    columnId: -1,
+    quote: citation.quote,
+    pageNumber: citation.page,
+    start: citation.char_start,
+    end: citation.char_end,
+    boxes: citation.boxes,
   };
 }

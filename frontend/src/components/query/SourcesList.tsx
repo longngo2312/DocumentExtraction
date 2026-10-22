@@ -8,8 +8,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import type { QueryCitation } from "../../api/query";
-import type { ActiveQuote } from "../../types";
+import { citationToQuote, type QueryCitation } from "../../api/query";
 
 interface SourcesListProps {
   citations: QueryCitation[];
@@ -21,15 +20,9 @@ export default function SourcesList({ citations }: SourcesListProps) {
   if (citations.length === 0) return null;
 
   function open(citation: QueryCitation) {
-    const quote: ActiveQuote = {
-      columnId: -1,
-      quote: citation.quote,
-      pageNumber: citation.page,
-      start: null,
-      end: null,
-      boxes: citation.boxes,
-    };
-    navigate(`/documents/${citation.document_id}`, { state: { quote } });
+    navigate(`/documents/${citation.document_id}`, {
+      state: { quote: citationToQuote(citation) },
+    });
   }
 
   return (
@@ -74,11 +67,19 @@ export default function SourcesList({ citations }: SourcesListProps) {
             >
               <Typography variant="caption" sx={{ fontWeight: 700 }}>
                 [{index + 1}] {citation.filename} · p.{citation.page}
+                {citation.column && ` · ${citation.column}`}
               </Typography>
               <Typography
                 variant="body2"
                 color="text.secondary"
-                sx={{ mt: 0.25, fontStyle: "italic" }}
+                sx={{
+                  mt: 0.25,
+                  fontStyle: "italic",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 4,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
               >
                 “{citation.quote}”
               </Typography>

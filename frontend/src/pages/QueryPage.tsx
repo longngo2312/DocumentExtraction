@@ -1,16 +1,47 @@
 import { Alert, Box, Container, Stack } from "@mui/material";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import type { QueryMessage } from "../api/query";
-import { askQuery } from "../api/query";
+import {
+  askQuery,
+  getQueryStatus,
+  type QueryMessage,
+  type QueryStatus,
+} from "../api/query";
 import ChatMessageList from "../components/query/ChatMessageList";
 import Composer from "../components/query/Composer";
 import EmptyChatState from "../components/query/EmptyChatState";
+import SearchStatusBanner from "../components/query/SearchStatusBanner";
+
+/** How often to re-read the status while documents are being indexed. */
+const STATUS_POLL_MS = 5000;
 
 export default function QueryPage() {
   const [messages, setMessages] = useState<QueryMessage[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<QueryStatus | null>(null);
+
+  // Every setState sits in a .then, so none runs synchronously inside the
+  // effects below.
+  const refreshStatus = useCallback(() => {
+    getQueryStatus()
+      .then(setStatus)
+      // An unreadable status is not worth a banner; a failing question will
+      // still report its own error.
+      .catch(() => setStatus(null));
+  }, []);
+
+  useEffect(() => {
+    refreshStatus();
+  }, [refreshStatus]);
+
+  // Poll only while something is being indexed — that is the one state that
+  // changes without the user doing anything.
+  useEffect(() => {
+    if (!status?.indexing) return;
+    const timer = setInterval(refreshStatus, STATUS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [status?.indexing, refreshStatus]);
 
   // The dashboard composer hands its question over in router state rather than
   // answering it there, so the conversation starts in one place.
@@ -87,12 +118,13 @@ export default function QueryPage() {
             flexDirection: "column",
           }}
         >
-          {/* Scrolls away with the conversation — it is a caveat about the
-              answers, not permanent chrome worth a strip of every screen. */}
-          <Alert severity="info" variant="outlined" sx={{ mb: 3 }}>
-            Retrieval isn&apos;t wired up yet — answers are placeholders.
-            Citations link to real uploaded documents.
-          </Alert>
+          {/* Scrolls away with the conversation — it explains the state of
+              search, not permanent chrome worth a strip of every screen. */}
+          {status && (
+            <Box sx={{ mb: 3 }}>
+              <SearchStatusBanner status={status} onChanged={refreshStatus} />
+            </Box>
+          )}
 
           {messages.length === 0 && !pending ? (
             <EmptyChatState onPick={handleSend} />
@@ -116,8 +148,15 @@ export default function QueryPage() {
             <Composer
               onSend={handleSend}
               pending={pending}
+              // With the vector store down every question fails — but only
+              // after a model call. Better not to let one be asked.
+              disabled={status?.qdrant === false}
               autoFocus
-              placeholder="Ask a follow-up…"
+              placeholder={
+                messages.length === 0
+                  ? "Ask about your documents…"
+                  : "Ask a follow-up…"
+              }
             />
           </Stack>
         </Container>
