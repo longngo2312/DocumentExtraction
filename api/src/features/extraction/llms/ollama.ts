@@ -1,8 +1,10 @@
 import { LlmProvider, LlmRequest } from "./dtos.js";
-const OLLAMA_MODEL = "qwen2.5:7b-instruct-q4_K_M";
-const OLLAMA_URL = "http://localhost:11434/api/chat";
+const OLLAMA_BASE = process.env.OLLAMA_URL.replace(/\/+$/, "");
+/** Whichever chat model this machine has pulled and has the VRAM for. */
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL;
+const OLLAMA_URL = `${OLLAMA_BASE}/api/chat`;
 /** The batch endpoint — not /api/embeddings, which is one round trip per input. */
-const OLLAMA_EMBED_URL = "http://localhost:11434/api/embed";
+const OLLAMA_EMBED_URL = `${OLLAMA_BASE}/api/embed`;
 
 /**
  * The embedding model and its width are permanent: both are baked into every

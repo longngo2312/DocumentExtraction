@@ -1,4 +1,7 @@
-const BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+const BASE_URL = import.meta.env.VITE_API_URL;
+if (!BASE_URL) {
+  throw new Error("VITE_API_URL is not set. Add it to frontend/.env and restart Vite.");
+}
 
 //custom error class
 export class ApiError extends Error {

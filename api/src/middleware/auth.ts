@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import type { JWTPayload } from "../features/auth/dtos/auth.dto.js";
 
-export const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret-change-in-prod";
+export const JWT_SECRET = process.env.JWT_SECRET;
 
 //declare req.user
 declare global {

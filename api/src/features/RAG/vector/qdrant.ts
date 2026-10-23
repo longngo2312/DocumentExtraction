@@ -15,7 +15,7 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { EMBED_DIMENSIONS } from "../../extraction/llms/ollama.js";
 
-const QDRANT_URL = "http://localhost:6333";
+const QDRANT_URL = process.env.QDRANT_URL;
 const COLLECTION = "document_chunks";
 
 /**

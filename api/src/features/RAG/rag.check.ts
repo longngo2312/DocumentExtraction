@@ -1,13 +1,14 @@
 /**
  * Runnable checks for the RAG defects that fail silently.
  *
- *   npx tsx src/features/RAG/rag.check.ts           # pure, nothing running
- *   npx tsx src/features/RAG/rag.check.ts --live    # + Ollama and Qdrant
+ *   npx tsx --env-file=.env src/features/RAG/rag.check.ts           # pure, nothing running
+ *   npx tsx --env-file=.env src/features/RAG/rag.check.ts --live    # + Ollama and Qdrant
  *
  * No framework on purpose. Each check guards something that would otherwise
  * surface only as a wrong highlight, a wrong number or another user's
  * document in an answer — long after the cause.
  */
+import "../../env.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";

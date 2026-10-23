@@ -6,3 +6,4 @@ CLAUDE.md
 *.sqlite-shm
 api/perf-probe.ts
 api/eng.traineddata
+.env
