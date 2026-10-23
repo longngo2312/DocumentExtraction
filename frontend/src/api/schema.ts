@@ -1,4 +1,4 @@
-import type { DocumentSchema, SchemaDetail } from "../types";
+import type { DocumentSchema, SchemaColumn, SchemaDetail } from "../types";
 import { apiFetch } from "./client";
 
 export function createDocumentSchema(
@@ -26,7 +26,10 @@ export function updateSchema(
   id: number,
   data: { name?: string; description?: string; columns?: unknown[] },
 ) {
-  return apiFetch<DocumentSchema>(`/schemas/${id}`, {
+  // The saved schema with its columns — new ones carry their fresh ids.
+  return apiFetch<
+    Omit<SchemaDetail, "schemaColumns"> & { columns: SchemaColumn[] }
+  >(`/schemas/${id}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });

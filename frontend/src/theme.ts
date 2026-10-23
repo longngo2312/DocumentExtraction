@@ -29,6 +29,8 @@ declare module "@mui/material/styles" {
       activeRow: string;
       /** Unreviewed (pending) row wash. */
       pendingRow: string;
+      /** Form-control boundary that has to read as a control: 3:1+ on paper. */
+      control: string;
     };
   }
   interface PaletteOptions {
@@ -74,6 +76,9 @@ const theme = createTheme({
           viewer: "#E2E8F0",
           activeRow: "#EFF6FF",
           pendingRow: "#FEF3C7",
+          // 3.3:1 on paper. `divider` is 1.2:1 — fine for a rule, too faint
+          // to be the only edge of an input.
+          control: "#858F9E",
         },
         // #475569 on #F8FAFC is 7.1:1 — the tightest text pair in the scheme.
         text: { primary: "#0F172A", secondary: "#475569", disabled: "#94A3B8" },
@@ -124,6 +129,8 @@ const theme = createTheme({
           // the active nav pill and the selected row stay legible.
           activeRow: "#0A0A33",
           pendingRow: "#422006",
+          // 3.7:1 on paper.
+          control: "#6E7276",
         },
         // #626568 is 3.3:1 on the canvas — too low for body text, so it is
         // the disabled tier and a lighter step of it carries secondary text
