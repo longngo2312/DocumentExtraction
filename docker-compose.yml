@@ -1,0 +1,37 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: document-backend
+    ports:
+      - "3000:3000"
+    env_file: api/.env
+    environment:
+      NODE_ENV: production
+      # localhost inside the container is the container itself; reach the host's services instead.
+      OLLAMA_URL: http://host.docker.internal:11434
+      QDRANT_URL: http://host.docker.internal:6333
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - sqlite_data:/app/api/db
+      - uploads:/app/api/storage
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3000/api
+    container_name: document-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:
+  uploads:
