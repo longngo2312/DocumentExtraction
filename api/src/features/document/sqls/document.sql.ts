@@ -33,8 +33,25 @@ export const DOCUMENT_SQL = {
 // Lives in the admin DB, not the tenant DB.
 export const JOB_SQL = {
   insertJob: `
-    INSERT INTO extraction_jobs (user_id, document_id, status)
-    VALUES (?, ?, 'queued');
+    INSERT INTO extraction_jobs (user_id, document_id, job_type, status)
+    VALUES (?, ?, ?, 'queued');
+  `,
+
+  // Documents on their way to being searchable: parse feeds index, so both
+  // count. Drives the query page's "N documents are being indexed" state.
+  countPendingSearchJobs: `
+    SELECT COUNT(DISTINCT document_id) AS n FROM extraction_jobs
+     WHERE user_id = ? AND job_type IN ('parse', 'index')
+       AND status IN ('queued', 'running');
+  `,
+
+  // The index-backfill guard: a document already waiting on (or running) an
+  // index job does not get a second one.
+  hasPendingJob: `
+    SELECT 1 FROM extraction_jobs
+     WHERE user_id = ? AND document_id = ? AND job_type = ?
+       AND status IN ('queued', 'running')
+     LIMIT 1;
   `,
 
   // document_id is only unique within a tenant — every tenant DB numbers its

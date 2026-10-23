@@ -1,4 +1,6 @@
 export interface SchemaColumnInput {
+  /** Set for a column that already exists; absent for a new one. */
+  id?: number;
   name: string;
   description?: string;
   data_type?: "text" | "number" | "date" | "boolean" | "enum";

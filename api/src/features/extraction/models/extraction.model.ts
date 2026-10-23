@@ -2,10 +2,7 @@ import {
   DocumentListItem,
   DocumentRecord,
 } from "../../document/models/document.model.js";
-import type {
-  NormalizedBox,
-  ParsedSpan,
-} from "../../parsing/types.js";
+import type { NormalizedBox, ParsedSpan } from "../../parsing/types.js";
 import type { SchemaColumns } from "../../schema/models/schema.model.js";
 
 export interface DocumentText {
@@ -147,29 +144,15 @@ export interface ReviewField {
   enum_options: string[] | null;
   llm_value: string | null;
   llm_quote: string | null;
-  /** How strongly the model thinks its own quote supports this answer, 0..1. */
   llm_confidence: number | null;
-  /** One sentence naming the evidence and the step taken from it. */
   llm_reasoning: string | null;
   basis: Basis | null;
-  /**
-   * The grounding check's verdict. Null means it did not run — an unverified
-   * inference, NOT a passing one. The UI must say "not verified".
-   */
   support: Support | null;
   value_text: string | null;
   source_page: number | null;
-  // Index into the matching ReviewPage.text, so the text viewer can slice the
-  // quote out directly. Null whenever match_kind is "none".
   source_start: number | null;
   source_end: number | null;
-  /**
-   * Normalized 0..1 rects, one per line, ready to draw. Null for formats with
-   * no geometry — office and plain text — which is what puts the client on its
-   * search fallback rather than leaving it with an empty highlight.
-   */
   source_boxes: NormalizedBox[] | null;
-  /** Span identity, so geometry can be re-derived without re-running the match. */
   source_span_ids: number[] | null;
   match_kind: MatchKind | null;
   confidence: number | null;

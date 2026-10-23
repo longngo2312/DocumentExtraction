@@ -54,7 +54,11 @@ export default function Layout() {
   const width = collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100%" }}>
+    // Exactly one viewport tall and clipped, so the shell itself can never
+    // scroll: pages stay put and only their contents move. `dvh` rather than
+    // `vh` because mobile browser chrome makes `vh` taller than what you can
+    // actually see, which would push the bottom edge off-screen.
+    <Box sx={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
       <Box
         component="a"
         href="#main"
@@ -123,7 +127,10 @@ export default function Layout() {
           minWidth: 0,
           display: "flex",
           flexDirection: "column",
-          minHeight: "100%",
+          // Not `minHeight: 100%` — that lets a tall child grow the column
+          // past the viewport and drag the panel with it. Stretch gives it
+          // the full height already; this only permits it to shrink.
+          minHeight: 0,
         }}
       >
         {!isDesktop && (
@@ -155,6 +162,9 @@ export default function Layout() {
 
         {/* No Container here — PageShell owns page width. Nesting both is what
             made every page doubly padded and doubly constrained. */}
+        {/* Full-bleed, as every screen but the dashboard is: the rounded
+            inset panel belongs to that one page, not to the shell. This
+            clips rather than grows, so each page scrolls inside it. */}
         <Box
           component="main"
           id="main"
@@ -163,6 +173,7 @@ export default function Layout() {
             minHeight: 0,
             display: "flex",
             flexDirection: "column",
+            overflow: "hidden",
           }}
         >
           <Outlet />

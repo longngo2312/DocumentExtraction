@@ -24,15 +24,9 @@ export interface ParsedPage {
   text: string;
   page: number;
   source: "text" | "ocr";
-  /**
-   * Positioned pieces of `text`, in the order they were read. Assembled in the
-   * same loop that built `text` — see the invariant in docs/phase5.
-   */
   spans: ParsedSpan[];
-  /** Page box in its own units — points for PDF, pixels for images, 0 for office. */
   width: number;
   height: number;
-  /** Human name for the unit when "page N" is wrong: "Q3 Actuals", "Slide 4". */
   label?: string;
 }
 

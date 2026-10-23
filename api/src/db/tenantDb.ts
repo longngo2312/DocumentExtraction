@@ -7,15 +7,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TENANTS_DIR = path.join(__dirname, "../../db/tenant");
 
 export function openTenantDB(tenantDBPath: string) {
+  fs.mkdirSync(path.dirname(tenantDBPath), { recursive: true });
   const db = new Database(tenantDBPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
   db.exec(
     // Create tables for each users
-    `   
-        DROP TABLE IF EXISTS extractedDocumentText;
- 
+    `    
         CREATE TABLE IF NOT EXISTS document_schemas (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             name         TEXT NOT NULL UNIQUE,
@@ -97,9 +96,49 @@ export function openTenantDB(tenantDBPath: string) {
             input_chars  INTEGER NOT NULL,
             generated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        
+
+        CREATE TABLE IF NOT EXISTS document_chunks (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id    INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+            chunk_index    INTEGER NOT NULL,   -- ordinal within the document, 0-based
+            page           INTEGER NOT NULL,
+            text           TEXT NOT NULL,
+            char_start     INTEGER NOT NULL,   -- offsets into pages_json[page-1].text,
+            char_end       INTEGER NOT NULL,   -- same frame as extracted_values.source_start
+            span_ids       TEXT,               -- JSON number[] — parse in consumers
+            boxes          TEXT,               -- JSON NormalizedBox[] — empty for office/plain
+            token_estimate INTEGER NOT NULL,
+            embed_model    TEXT,               -- a model swap invalidates the index
+            embedded_at    TEXT,
+            UNIQUE(document_id, chunk_index)
+        );
+        CREATE INDEX IF NOT EXISTS idx_chunks_document ON document_chunks(document_id);
+
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            title       TEXT NOT NULL,               -- the first question, trimmed
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- The server's own record of the conversation. History for the next
+        -- answer is read from here, never from the client, so a client cannot
+        -- put words in the assistant's mouth.
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id     INTEGER NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+            role           TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+            content        TEXT NOT NULL,
+            -- A snapshot: the citations as they were verified when answered.
+            citations_json TEXT NOT NULL DEFAULT '[]',
+            ungrounded     INTEGER NOT NULL DEFAULT 0,
+            created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, id);
+
     `, //pages_json` is `JSON.stringify(result.pages)
   );
+
   return db;
 }
 
@@ -108,9 +147,6 @@ export function tenantDBPath(userId: number): string {
 }
 
 export function provisionTenantDB(userId: number): string {
-  if (!fs.existsSync(TENANTS_DIR)) {
-    fs.mkdirSync(TENANTS_DIR, { recursive: true });
-  }
   const dbPath = tenantDBPath(userId);
   openTenantDB(dbPath);
   return dbPath;

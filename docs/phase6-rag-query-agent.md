@@ -1,4 +1,4 @@
-# Phase 6b — RAG: chunking, embedding, ChromaDB, query agent
+# Phase 6b — RAG: chunking, embedding, Qdrant, query agent
 
 Build guide. Ordered stages, one checklist per file. Written 2026-09-02.
 
@@ -18,7 +18,8 @@ Five things, in dependency order:
 1. **Chunk** parsed pages into passages that keep their provenance — page, char
    offsets, span ids, boxes.
 2. **Embed** chunks with a second, small Ollama model.
-3. **Index** into ChromaDB, one collection per tenant, **only after human review**.
+3. **Index** into Qdrant, one shared collection partitioned by tenant, **only
+   after human review**.
 4. **Retrieve** — vector search plus a metadata filter, over reviewed documents.
 5. **Answer** — a two-tool router, with citations the server verifies before they
    reach the client.
@@ -39,15 +40,15 @@ document become searchable.
 | --- | --- | --- |
 | `extracted` | Model answered, nobody checked | **No** |
 | `reviewed` | Human passed the review gate | Queued for indexing |
-| `indexed` | Chunks embedded and in Chroma | Yes |
+| `indexed` | Chunks embedded and in Qdrant | Yes |
 
 Consequences to build for, not around:
 
 - Indexing is triggered by `saveReview`, not by the extraction worker.
-- Re-review must re-index — delete this document's chunks from Chroma first, or
+- Re-review must re-index — delete this document's points from Qdrant first, or
   a stale passage answers questions forever.
-- `deleteDocument` must delete from Chroma too. SQLite has
-  `ON DELETE CASCADE`; Chroma has nothing, and an orphaned vector still gets
+- `deleteDocument` must delete from Qdrant too. SQLite has
+  `ON DELETE CASCADE`; Qdrant has nothing, and an orphaned vector still gets
   retrieved and still gets cited.
 
 ---
@@ -83,7 +84,7 @@ before the answer even starts.
       is 5m, which means the first query after a coffee break pays a reload.
 
 **The dimension is permanent.** It is baked into every stored vector and into the
-Chroma collection. Switching `nomic-embed-text` (768) → `all-minilm` (384)
+Qdrant collection (`size` is fixed at creation). Switching `nomic-embed-text` (768) → `all-minilm` (384)
 invalidates the entire index. Decide before the first indexing run, and store the
 model name on every chunk row so a mismatch is detectable rather than silently
 returning garbage neighbours.
@@ -99,9 +100,9 @@ the reload); interactive chat cannot.
 
 | Question | Decision |
 | --- | --- |
-| Vector store | **ChromaDB**, run as a separate local server. |
-| Tenancy | **One Chroma collection per user**, `user_<id>` — mirrors the tenant-DB-per-user design. |
-| Source of truth | **SQLite.** Chroma holds vectors + ids + flat metadata; every chunk's text and provenance lives in `document_chunks` and can rebuild the index. |
+| Vector store | **Qdrant**, run as a separate local server (Docker or the standalone binary). TS client: `@qdrant/js-client-rest`. |
+| Tenancy | **One collection, `document_chunks`, partitioned by a `tenant` payload field** with an `is_tenant` index. Qdrant's own multitenancy guidance: many small collections cost memory and overhead per collection; payload partitioning does not. Isolation is enforced in one module — see Stage 0. |
+| Source of truth | **SQLite.** Qdrant holds vectors + ids + a minimal payload; every chunk's text and provenance lives in `document_chunks` and can rebuild the index. |
 | What gets indexed | **Reviewed documents only.** Chunks carry human-accepted context. |
 | Chunk unit | **Per page**, never across a page boundary — offsets are page-local and provenance breaks otherwise. |
 | Agent shape | **Fixed two-tool router**, not a free-running ReAct loop. See [Stage 7](#stage-7--the-query-agent). |
@@ -109,52 +110,88 @@ the reload); interactive chat cannot.
 
 ---
 
-## Stage 0 — ChromaDB running
+## Stage 0 — Qdrant running
 
-Chroma is Python. This adds a **third process** to a Node-only project — an
-honest operational cost, and the main argument against it if you would rather
-keep the stack homogeneous. (The alternative worth knowing: `sqlite-vec` as an
-extension on the tenant DB, no new process, no new language, weaker tooling. If
-the extra process is unacceptable, that swap belongs here, before Stage 1.)
+Qdrant is a Rust server. This adds a **third process** to a Node-only project —
+an honest operational cost. What you get for it: a first-party TypeScript client,
+no default embedding function to trip over, payloads that accept arrays and
+nested JSON, and a built-in dashboard for inspecting what actually got indexed.
 
-- [ ] `pip install chromadb`
-- [ ] `chroma run --path ./chroma-data --port 8000`
-- [ ] Add `chroma-data/` to `.gitignore`.
-- [ ] `npm i chromadb` in `api/`.
-- [ ] **Pin the client to the server's major version.** The JS client's
-      constructor and collection API changed shape across 1.x/2.x; a mismatched
-      pair fails at `getOrCreateCollection` with an unhelpful error. Check the
-      installed client's own README for the constructor it wants rather than
-      copying one from memory.
-- [ ] Confirm the server answers on `http://localhost:8000/api/v2/heartbeat`
-      before writing any TypeScript against it.
+Qdrant uses **system RAM, not VRAM** — it does not compete with Ollama for the
+3050's 6 GB.
+
+- [ ] Start the server. Either:
+  - Docker Desktop (needs WSL2 on Windows):
+
+    ```bash
+    docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
+      -v "$(pwd)/qdrant-data:/qdrant/storage" qdrant/qdrant
+    ```
+
+  - Or the standalone Windows binary from Qdrant's GitHub releases, if Docker
+    is more setup than you want. Point its storage path at `./qdrant-data`.
+- [ ] Add `qdrant-data/` to `.gitignore`.
+- [ ] `npm i @qdrant/js-client-rest` in `api/`.
+- [ ] **Pin the client to the server's minor version.** The client runs a
+      version-compatibility check on connect and warns on mismatch; the Query
+      API used in Stage 5 (`client.query`) needs server ≥ 1.10. Check the
+      installed client's README for method signatures rather than copying them
+      from memory.
+- [ ] Confirm the server answers on `http://localhost:6333/healthz`, and open
+      `http://localhost:6333/dashboard` once — it is the fastest way to see
+      whether points and payloads look right during Stage 4.
 - [ ] Update the "Running the Project" section of `CLAUDE.md` — it currently
       documents two terminals and this makes it three.
 
-### New: `api/src/features/rag/vector/chroma.ts`
+### New: `api/src/features/rag/vector/qdrant.ts`
 
-- [ ] Module-singleton client, same shape as `adminDB`.
-- [ ] `collectionFor(userId)` → `getOrCreateCollection({ name: 'user_<id>', ... })`.
-- [ ] **Set the distance metric at creation:**
+- [ ] Module-singleton `QdrantClient({ url: "http://localhost:6333" })`, same
+      shape as `adminDB`.
+- [ ] `ensureCollection()` at startup — create only if missing:
 
 ```ts
-metadata: { "hnsw:space": "cosine" }
+await client.createCollection("document_chunks", {
+  vectors: { size: 768, distance: "Cosine" },
+});
+await client.createPayloadIndex("document_chunks", {
+  field_name: "tenant",
+  field_schema: { type: "keyword", is_tenant: true },
+});
+await client.createPayloadIndex("document_chunks", {
+  field_name: "document_id",
+  field_schema: "integer",
+});
 ```
 
-  Chroma's default is `l2`, and **it cannot be changed after the collection
-  exists** — you would have to delete and rebuild. Cosine is what normalized
-  embeddings want.
+  **`size` and `distance` cannot be changed after the collection exists** — you
+  would have to delete and rebuild. Cosine is what normalized embeddings want,
+  and Qdrant normalizes on insert for you. `is_tenant` tells Qdrant to lay
+  storage out per tenant, so a filtered search reads only that user's points.
+  Without the payload indexes, every filter is a full scan.
 
-- [ ] **Never let the client pick an embedding function.** The JS client will
-      reach for a default (OpenAI) when you call `add` without `embeddings`,
-      which means an outbound network call and an API-key error at best. Always
-      pass `embeddings` explicitly; we generate them in Stage 4.
+- [ ] **Tenant isolation lives here and nowhere else.** One collection means a
+      query without a tenant filter reads *every user's documents* — a
+      cross-tenant data leak, not a relevance bug. So:
+  - [ ] **Do not export the raw client.** Export `upsertChunks(userId, ...)`,
+        `deleteDocumentPoints(userId, documentId)`, and
+        `searchChunks(userId, vector, filter)` only.
+  - [ ] Every one of them builds its filter through one helper that always
+        prepends the tenant condition:
+
+```ts
+function tenantFilter(userId: number, extra: object[] = []) {
+  return { must: [{ key: "tenant", match: { value: `user_${userId}` } }, ...extra] };
+}
+```
+
+  - [ ] Every upsert stamps `tenant: "user_<id>"` on the payload. A point
+        without it is unreachable, and it is also unowned — worse.
 - [ ] Wrap connection failure with a named error, the way
       `describeNetworkError` does for Ollama
       ([ollama.ts:11-20](../api/src/features/extraction/llms/ollama.ts#L11-L20)) —
-      "Cannot reach ChromaDB at :8000. Start it with `chroma run --path
-      ./chroma-data`." A bare `fetch failed` in the document grid is the same
-      unreadable failure phase 5 already fixed once.
+      "Cannot reach Qdrant at :6333. Start it with `docker start qdrant`." A bare
+      `fetch failed` in the document grid is the same unreadable failure phase 5
+      already fixed once.
 
 ---
 
@@ -200,7 +237,8 @@ built** — `HighlightOverlay` and `TextViewer` take it unchanged.
 - [ ] `insertMany` — prepared once, run in a `db.transaction`.
 - [ ] `deleteByDocument` — `DELETE FROM document_chunks WHERE document_id = ?`.
       Called before every re-index.
-- [ ] `getByIds` — retrieval hydrates Chroma hits back into full rows:
+- [ ] `getByIds` — retrieval hydrates Qdrant hits (by `payload.chunk_id`) back
+      into full rows:
 
 ```sql
 SELECT c.*, d.filename
@@ -328,25 +366,35 @@ Order matters — every step is written to be safe to re-run:
 - [ ] Read `parsedDocumentText` via `DOCUMENT_TEXT_SQL.getByDocumentId` (the
       `SELECT *` one — this path needs `spans_json`).
 - [ ] **Delete first, both sides:** `deleteByDocument` in SQLite, and
-      `collection.delete({ where: { document_id: documentId } })` in Chroma.
-      Re-indexing without this leaves the old chunks retrievable forever.
+      `deleteDocumentPoints(userId, documentId)` in Qdrant (a filter delete on
+      `tenant` + `document_id`, with `wait: true`). Re-indexing without this
+      leaves the old chunks retrievable forever.
 - [ ] `chunkPages(...)` → insert rows in one transaction → **read the assigned
-      `id`s back**. The Chroma id must be the SQLite row id (as a string); a
-      separately-generated uuid means a second mapping table for nothing.
+      `id`s back**.
+- [ ] **Point ids are not SQLite row ids.** SQLite `AUTOINCREMENT` is
+      per tenant DB, so user 1's chunk 42 and user 2's chunk 42 would collide in
+      the one shared collection — the second upsert silently *overwrites* the
+      first user's vector. Derive a stable UUID from `(userId, chunkId)`
+      (`uuidv5` from the `uuid` package), and carry `chunk_id` in the payload for
+      hydration.
 - [ ] `embed()` the chunk texts in batches.
-- [ ] `collection.add({ ids, embeddings, documents, metadatas })`.
-- [ ] **Chroma metadata takes flat scalars only — string, number, boolean. No
-      arrays, no nested objects.** `span_ids` and `boxes` therefore *cannot* live
-      there; they stay in SQLite and are joined back at retrieval by chunk id.
-      Metadata carries only what a `where` filter needs:
+- [ ] `upsertChunks(userId, points)` → `client.upsert(..., { wait: true, points })`.
+      **`wait: true`** — otherwise the document flips to `'indexed'` before the
+      points are searchable, and the first question after review misses it.
+- [ ] Payload carries only what a filter or hydration needs:
 
 ```ts
-{ document_id, schema_id, page, filename }
+{ tenant: `user_${userId}`, chunk_id, document_id, schema_id, page }
 ```
+
+  Qdrant payloads *can* hold arrays and nested JSON, so `span_ids` and `boxes`
+  would fit. Keep them in SQLite anyway: SQLite is the source of truth, and two
+  copies of provenance drift. Leave `filename` out too — a rename would
+  leave every payload stale; the hydration join already returns it.
 
 - [ ] Stamp `embed_model` and `embedded_at` on the rows.
 - [ ] Flip the document to `'indexed'`.
-- [ ] Wrap the Chroma write so a failure leaves the document at `'reviewed'` —
+- [ ] Wrap the Qdrant write so a failure leaves the document at `'reviewed'` —
       **not** `'indexed'`. A document marked indexed with nothing in the vector
       store is invisible to search and looks fine in the grid, which is the worst
       combination available.
@@ -398,7 +446,7 @@ export interface RetrievedChunk {
   charEnd: number;
   spanIds: number[];
   boxes: NormalizedBox[] | null;
-  distance: number;
+  score: number;
 }
 
 export async function retrieve(
@@ -413,16 +461,21 @@ export async function retrieve(
 - [ ] Embed the question with **the same model** used for indexing. Cross-model
       vectors are not comparable, and nothing about the result will look wrong —
       it will just be subtly useless.
-- [ ] `collection.query({ queryEmbeddings, nResults: k, where })`.
-- [ ] Hydrate hits through `CHUNKS_SQL.getByIds` and **re-sort into Chroma's
-      distance order** — SQLite returns rows in its own order and losing the
-      ranking silently degrades every answer.
-- [ ] **Drop hits above a cosine-distance floor** (start at ~0.6, tune by
-      watching real queries). Retrieval always returns `k` results, including for
-      a question the corpus cannot answer at all. Without a floor the model gets
-      five irrelevant passages and dutifully writes an answer from them — the RAG
-      equivalent of phase 6's unsupported inference.
-- [ ] A chunk whose row is missing from SQLite is a **stale Chroma entry**. Skip
+- [ ] `searchChunks(userId, vector, filter)` →
+      `client.query("document_chunks", { query: vector, filter: tenantFilter(...), limit: k, with_payload: true, score_threshold })`.
+      Results come back as `{ points: [{ id, score, payload }] }`.
+- [ ] Hydrate hits through `CHUNKS_SQL.getByIds` using `payload.chunk_id`, and
+      **re-sort into Qdrant's score order** — SQLite returns rows in its own
+      order and losing the ranking silently degrades every answer.
+- [ ] **Qdrant's Cosine `score` is a similarity — higher is better.** It is
+      *not* a distance; anything carried over from a distance-based store is
+      inverted. Rename the field `score`, not `distance`, in `RetrievedChunk`.
+- [ ] **Pass `score_threshold`** (start at ~0.4, tune by watching real queries).
+      Qdrant drops weaker hits server-side. Without a floor, retrieval always
+      returns `k` results, including for a question the corpus cannot answer at
+      all; the model gets five irrelevant passages and dutifully writes an answer
+      from them — the RAG equivalent of phase 6's unsupported inference.
+- [ ] A point whose row is missing from SQLite is a **stale Qdrant entry**. Skip
       it and log — it means a delete path failed somewhere, and it will keep
       happening until that is fixed.
 
@@ -475,7 +528,7 @@ as documents you were "given" — just answer the question.
       passages. Rendering that as a link produces a citation that goes nowhere,
       which is worse than no citation because it looks checked.
 - [ ] Return the answer, the *cited* chunks (not all retrieved ones), and the
-      retrieval distances — the UI needs the first two and the debugging needs
+      retrieval scores — the UI needs the first two and the debugging needs
       the third.
 
 ---
@@ -544,13 +597,13 @@ const ROUTE_SCHEMA = {
 - [ ] `POST /api/query` — `{ question, history?, documentId? }` → answer +
       citations. Mounted behind `requireAuth` like every other route.
 - [ ] `GET /api/query/status` → indexed document count, chunk count, and whether
-      Chroma is reachable. The empty state needs to distinguish "you have not
+      Qdrant is reachable. The empty state needs to distinguish "you have not
       reviewed anything yet" from "the vector database is not running", and only
       the server can tell them apart.
 - [ ] `POST /api/documents/:id/index` — manual re-index. Useful while tuning
       chunk size, since every change invalidates the whole index.
-- [ ] `deleteDocument` — **add the Chroma delete.** SQLite cascades,
-      Chroma does not.
+- [ ] `deleteDocument` — **add the Qdrant delete.** SQLite cascades,
+      Qdrant does not.
 
 **Streaming.** `OllamaProvider.complete` is non-streaming and JSON-only. A
 25-second wait with no output is the difference between "thinking" and "broken".
@@ -599,7 +652,7 @@ build components, not one long page.
       checks.
 - [ ] `QueryEmptyState.tsx` — three real states, the same discipline as phase 6's
       `SummaryTab`:
-      - Chroma unreachable → "The vector database is not running."
+      - Qdrant unreachable → "The vector database is not running."
       - Reachable, zero indexed documents → **"Review a document to make it
         searchable"**, with a link to `/documents`. This is the gate becoming
         visible, and it is the state a new user hits first.
@@ -632,13 +685,13 @@ build components, not one long page.
 - [ ] **The gate holds.** Upload and extract a document but do not review it. It
       must not appear in any answer. Then review it and confirm it does.
 - [ ] **Re-index is idempotent.** Review the same document twice.
-      `countByDocument` must not double, and Chroma must not hold two copies of
+      `countByDocument` must not double, and Qdrant must not hold two copies of
       each passage.
 - [ ] **Delete is complete.** Delete an indexed document, then ask a question it
       previously answered. No stale citation, no crash on a missing SQLite row.
 - [ ] **The refusal works.** Ask something the corpus has no answer to. It must
       say so rather than assembling an answer from the five nearest passages —
-      this is the distance floor and the prompt working together, and it is the
+      this is the score threshold and the prompt working together, and it is the
       RAG equivalent of the staff-engineer test.
 - [ ] **Citations resolve.** Every `[n]` in an answer maps to a real chunk, and
       clicking it lands on the right page with the right text highlighted.
@@ -648,6 +701,9 @@ build components, not one long page.
 - [ ] **VRAM.** `ollama ps` after three consecutive chat messages. Both models
       resident, no reload between messages. This is the assumption the whole model
       choice rests on — measure it, do not trust the arithmetic above.
+- [ ] **Tenant isolation.** Two users, each with an indexed document. Ask user A a
+      question only user B's document answers. It must refuse, not cite B. Then
+      check in the dashboard that no point is missing a `tenant` payload.
 - [ ] **Cross-document.** Two documents on the same schema. A question only the
       second answers must retrieve from the second.
 - [ ] **Aggregate path.** "How many documents have X?" must route to
@@ -661,13 +717,16 @@ build components, not one long page.
 - **Retrieval quality on a small corpus is the whole ballgame.** With a handful
   of documents, top-5 cosine over 300-token chunks is adequate. It degrades
   first, and before reranking or hybrid search, the cheap wins are chunk size and
-  the distance floor.
+  the score threshold.
 - **`nomic-embed-text` is English-first.** Non-English documents will retrieve
   noticeably worse, and nothing in the UI will say why.
 - **The 8192 window caps everything.** 5 passages plus history plus system prompt
   plus answer. More chunks means shorter ones or less history; there is no third
   option on this card.
-- **Chroma is a third process with no supervision.** If it dies, indexing fails
+- **One shared collection means one missed filter leaks data.** The
+  `qdrant.ts` wrapper is the only defence. Any new code path that imports
+  `QdrantClient` directly bypasses it.
+- **Qdrant is a third process with no supervision.** If it dies, indexing fails
   and querying fails, and the only signal is the error text you wrote in Stage 0.
   Make that text good.
 - **Re-review invalidates the index and nothing enforces it.** The `saveReview`
@@ -684,6 +743,6 @@ build components, not one long page.
 - Streaming responses (first follow-up).
 - Reranking, hybrid BM25 + vector, query expansion.
 - A real multi-step agent loop.
-- Cross-tenant or shared collections.
-- Chroma persistence tuning, backup, or migration.
+- Cross-tenant search or sharing documents between users.
+- Qdrant snapshots, backup, quantization, or migration.
 - Summarising across documents — phase 6's summary is per-document.

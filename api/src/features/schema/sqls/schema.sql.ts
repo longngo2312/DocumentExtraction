@@ -39,7 +39,15 @@ export const SCHEMA_SQL = {
     WHERE id = ?;
   `,
 
-  deleteColumnsBySchemaId: `DELETE FROM schema_columns WHERE schema_id = ?;`,
+  getColumnIdsBySchemaId: `SELECT id FROM schema_columns WHERE schema_id = ?;`,
+
+  updateColumn: `
+    UPDATE schema_columns
+    SET name = ?, description = ?, data_type = ?, enum_options = ?, required = ?, position = ?
+    WHERE id = ? AND schema_id = ?;
+  `,
+
+  deleteColumn: `DELETE FROM schema_columns WHERE id = ? AND schema_id = ?;`,
 
   deleteSchemaById: `DELETE FROM document_schemas WHERE id = ?;`,
 };
