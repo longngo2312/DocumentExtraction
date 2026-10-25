@@ -25,12 +25,22 @@ FROM nginx:alpine AS runner
 
 COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
-# Send every unknown path to index.html so React Router handles page refreshes.
+# /api goes to the API container; every other unknown path gets index.html so
+# React Router handles page refreshes.
 COPY <<'EOF' /etc/nginx/conf.d/default.conf
 server {
   listen 80;
   root /usr/share/nginx/html;
+  # Above multer's 25 MB limit so oversized uploads get the API's error, not nginx's.
+  client_max_body_size 30m;
   location / { try_files $uri /index.html; }
+  # nginx's mime.types has no .mjs, and browsers refuse module scripts (the PDF.js worker) served as octet-stream.
+  location ~ \.mjs$ { default_type application/javascript; }
+  location /api/ {
+    proxy_pass http://api:3000;
+    # Chat and extraction calls can wait on Ollama well past nginx's 60s default.
+    proxy_read_timeout 300s;
+  }
 }
 EOF
 
