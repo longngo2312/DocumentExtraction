@@ -8,7 +8,7 @@ export const AUTH_SQL = {
       email,
       password_hash
     FROM users
-    WHERE email = ?;
+    WHERE username = ?;
   `,
 
   // Refresh only stores user_id, so the new access token needs the email back.

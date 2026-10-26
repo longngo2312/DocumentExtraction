@@ -6,7 +6,6 @@ interface AuthLayoutProps {
   title: string;
   subtitle: string;
   children: ReactNode;
-  /** Rendered under the card — the "no account yet?" style link. */
   footer: ReactNode;
 }
 

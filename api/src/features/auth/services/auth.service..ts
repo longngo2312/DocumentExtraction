@@ -87,10 +87,10 @@ export async function registerUser(body: RegisterBody): Promise<SessionResult> {
 }
 
 export async function loginUser(body: LoginBody): Promise<SessionResult> {
-  const email = body.email?.trim().toLowerCase();
+  const username = body.username?.trim().toLowerCase();
   const { password, rememberMe } = body;
 
-  const user = adminDb.prepare(AUTH_SQL.findUserForLogin).get(email) as
+  const user = adminDb.prepare(AUTH_SQL.findUserForLogin).get(username) as
     | User
     | undefined;
 
@@ -103,6 +103,7 @@ export async function loginUser(body: LoginBody): Promise<SessionResult> {
     throw new AuthError(401, "Invalid password.");
   }
 
+  //valid credentials
   adminDb.prepare(AUTH_SQL.updateLastLogin).run(user.id);
 
   return startSession(

@@ -5,7 +5,7 @@ export interface RegisterBody {
 }
 
 export interface LoginBody {
-  email: string;
+  username: string;
   password: string;
   /** Stretches the refresh token from 30 to 90 days. */
   rememberMe?: boolean;

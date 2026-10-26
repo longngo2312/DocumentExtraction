@@ -20,7 +20,7 @@ import { useAuthStore } from "../stores/authStore";
 export default function LoginPage() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +31,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const { user, token } = await login(email, password, rememberMe);
+      const { user, token } = await login(username, password, rememberMe);
       setAuth(user, token);
       navigate("/");
     } catch (error) {
@@ -59,11 +59,11 @@ export default function LoginPage() {
           {error && <Alert severity="error">{error}</Alert>}
 
           <TextField
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
+            label="Username"
+            type="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
             disabled={loading}
             fullWidth
             required
