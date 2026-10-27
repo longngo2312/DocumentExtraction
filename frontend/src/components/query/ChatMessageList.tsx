@@ -20,7 +20,10 @@ export default function ChatMessageList({
   }, [messages.length, pending]);
 
   return (
-    <Box sx={{ flexGrow: 1, overflowY: "auto", px: { xs: 0, sm: 1 } }}>
+    // No scroll of its own: the page owns the one scroll region, so this is
+    // plain flow. A second scroller here never got a definite height, and it
+    // left scrollIntoView picking between two ancestors.
+    <Box sx={{ px: { xs: 0, sm: 1 } }}>
       {/* Answers arrive asynchronously and are the whole point of the page, so
           they have to be announced rather than only painted. */}
       <Stack spacing={3} aria-live="polite" aria-busy={pending}>

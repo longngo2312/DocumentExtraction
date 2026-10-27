@@ -1,7 +1,6 @@
 import { Chip, Tooltip, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import type { QueryCitation } from "../../api/query";
-import type { ActiveQuote } from "../../types";
+import { citationToQuote, type QueryCitation } from "../../api/query";
 
 interface CitationChipProps {
   citation: QueryCitation;
@@ -17,16 +16,9 @@ export default function CitationChip({ citation, index }: CitationChipProps) {
   const navigate = useNavigate();
 
   function open() {
-    const quote: ActiveQuote = {
-      // No column owns a chat citation; -1 marks "not a field".
-      columnId: -1,
-      quote: citation.quote,
-      pageNumber: citation.page,
-      start: null,
-      end: null,
-      boxes: citation.boxes,
-    };
-    navigate(`/documents/${citation.document_id}`, { state: { quote } });
+    navigate(`/documents/${citation.document_id}`, {
+      state: { quote: citationToQuote(citation) },
+    });
   }
 
   return (
@@ -35,8 +27,20 @@ export default function CitationChip({ citation, index }: CitationChipProps) {
         <>
           <Typography variant="caption" sx={{ fontWeight: 700, display: "block" }}>
             {citation.filename} · p.{citation.page}
+            {citation.column && ` · ${citation.column}`}
           </Typography>
-          <Typography variant="caption">{citation.quote}</Typography>
+          {/* A passage is up to ~1200 chars; the tooltip is a glance, not a read. */}
+          <Typography
+            variant="caption"
+            sx={{
+              display: "-webkit-box",
+              WebkitLineClamp: 6,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {citation.quote}
+          </Typography>
         </>
       }
     >

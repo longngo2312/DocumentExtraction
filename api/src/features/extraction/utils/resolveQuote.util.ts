@@ -91,7 +91,7 @@ function union(a: NormalizedBox, b: NormalizedBox): NormalizedBox {
  * result draws a rect around every word, and a single union of a quote that
  * wraps draws one tall box swallowing the right margin.
  */
-function groupIntoLines(spans: ParsedSpan[]): NormalizedBox[] {
+export function groupIntoLines(spans: ParsedSpan[]): NormalizedBox[] {
   const lines: NormalizedBox[] = [];
 
   for (const span of spans) {

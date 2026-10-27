@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@napi-rs/canvas": "0.1.80",
+    "@qdrant/js-client-rest": "^1.19.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.11.1",
     "cookie-parser": "^1.4.7",
@@ -13,6 +14,7 @@
     "ollama": "^0.6.3",
     "pdfjs-dist": "5.4.296",
     "tesseract.js": "^7.0.0",
+    "uuid": "^14.0.2",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "xml2js": "^0.6.2"
   },
@@ -35,9 +37,9 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node --env-file-if-exists=.env dist/server.js"
   },
   "repository": {
     "type": "git",

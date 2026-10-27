@@ -1,0 +1,47 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: document-backend
+    # No published port: the browser reaches the API through the frontend's nginx at /api.
+    env_file: api/.env
+    environment:
+      NODE_ENV: production
+      # localhost inside the container is the container itself; Ollama runs on the host for the GPU.
+      OLLAMA_URL: http://host.docker.internal:11434
+      QDRANT_URL: http://qdrant:6333
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - sqlite_data:/app/api/db
+      - uploads:/app/api/storage
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+  # Its own Qdrant, so these vectors match this stack's SQLite and never mix with dev data.
+  qdrant:
+    image: qdrant/qdrant:v1.19.0
+    container_name: document-qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: /api
+    container_name: document-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:
+  uploads:
+  qdrant_data:

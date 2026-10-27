@@ -154,6 +154,10 @@ export default function ExtractionSummary({
         {/* Save button */}
         <Button
           variant="contained"
+          // `color` rather than a hand-painted bgcolor: MUI then pairs the
+          // label with the fill per scheme. Overriding only the background is
+          // what leaves a white label on a light-blue dark-mode button.
+          color={allReviewed && edits.size > 0 ? "success" : "primary"}
           startIcon={
             saving ? (
               <CircularProgress size={16} color="inherit" />
@@ -167,15 +171,6 @@ export default function ExtractionSummary({
             flexShrink: 0,
             px: 3,
             py: 1,
-            bgcolor: allReviewed && edits.size > 0
-              ? "success.main"
-              : "primary.main",
-            "&:hover": {
-              bgcolor: allReviewed && edits.size > 0
-                ? "success.dark"
-                : "primary.dark",
-            },
-            boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
           }}
         >
           {saving ? "Saving..." : "Save Review"}

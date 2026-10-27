@@ -41,7 +41,6 @@ export type DocumentStatus =
   | "processing"
   | "extracted"
   | "reviewed"
-  | "indexed"
   | "failed";
 
 //Shape returned by POST /documents

@@ -1,6 +1,7 @@
 import adminDB from "../../../db/adminDB.js";
 import { getTenantDb } from "../../../db/tenantDb.js";
 import { notifyWorker } from "../../extraction/worker.js";
+import { deleteDocumentPoints } from "../../RAG/vector/qdrant.js";
 import type { UploadResponse } from "../dtos/document.dto.js";
 import type {
   DocumentListItem,
@@ -42,7 +43,11 @@ export function createDocument(
   const documentId = Number(lastInsertRowid);
   let jobId: number;
   try {
-    const job = adminDB.prepare(JOB_SQL.insertJob).run(userId, documentId);
+    // Upload only parses. Extract and index are enqueued by the parse job once
+    // the text it writes has committed — see worker.ts.
+    const job = adminDB
+      .prepare(JOB_SQL.insertJob)
+      .run(userId, documentId, "parse");
     jobId = Number(job.lastInsertRowid);
   } catch (error) {
     db.prepare(DOCUMENT_SQL.deleteById).run(documentId);
@@ -89,6 +94,14 @@ export function deleteDocument(userId: number, id: number): boolean {
   db.prepare(DOCUMENT_SQL.deleteById).run(id);
   adminDB.prepare(JOB_SQL.deleteJobsByDocument).run(userId, id);
   safeUnlink(resolveStoragePath(document.storage_path));
+
+  // SQLite cascades the chunk rows; Qdrant has no cascade, so its points go
+  // explicitly. Best effort and not awaited: if Qdrant is down a delete should
+  // still succeed, and an orphaned point is harmless — retrieval hydrates every
+  // hit from SQLite and skips one with no row behind it.
+  deleteDocumentPoints(userId, id).catch((error) =>
+    console.warn(`[rag] could not delete points for document ${id}:`, error),
+  );
 
   return true;
 }

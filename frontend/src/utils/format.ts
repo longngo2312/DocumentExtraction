@@ -24,3 +24,31 @@ export function formatDayTime(value: string): string {
   const iso = value.replace(" ", "T") + "Z";
   return new Date(iso).toLocaleString();
 }
+
+const RELATIVE_STEPS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["second", 60],
+  ["minute", 60],
+  ["hour", 24],
+  ["day", 7],
+  ["week", 4.345],
+  ["month", 12],
+];
+
+/**
+ * "2026-08-10 19:10:03" (SQLite, UTC) -> "2 minutes ago". Card footers want
+ * the age, not the timestamp. Intl does the pluralising and the "ago"; the
+ * only thing here is picking which unit to hand it.
+ */
+export function formatRelative(value: string): string {
+  const then = new Date(value.replace(" ", "T") + "Z").getTime();
+  if (Number.isNaN(then)) return "";
+
+  const format = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  let amount = (Date.now() - then) / 1000;
+
+  for (const [unit, size] of RELATIVE_STEPS) {
+    if (Math.abs(amount) < size) return format.format(-Math.round(amount), unit);
+    amount /= size;
+  }
+  return format.format(-Math.round(amount), "year");
+}

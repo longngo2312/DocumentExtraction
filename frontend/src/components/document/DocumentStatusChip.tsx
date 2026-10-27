@@ -8,7 +8,6 @@ const STATUS_CHIP = {
   processing: { label: "Processing", color: "info" },
   extracted: { label: "Extracted", color: "success" },
   reviewed: { label: "Reviewed", color: "primary" },
-  indexed: { label: "Indexed", color: "secondary" },
   failed: { label: "Failed", color: "error" },
 } as const;
 

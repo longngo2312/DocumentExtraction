@@ -1,9 +1,28 @@
-import { Avatar, Box, Paper, Stack, Typography } from "@mui/material";
-import type { QueryMessage } from "../../api/query";
+import { Alert, Avatar, Box, Paper, Stack, Typography } from "@mui/material";
+import { Fragment } from "react";
+import type { QueryCitation, QueryMessage } from "../../api/query";
 import { useAuthStore } from "../../stores/authStore";
 import Brand from "../layout/Brand";
 import CitationChip from "./CitationChip";
 import SourcesList from "./SourcesList";
+
+/**
+ * Turns the answer's [n] markers into chips where they stand. The server has
+ * already dropped any marker without a source and renumbered the rest 1..N in
+ * citation order, so [n] is always citations[n - 1]; one that somehow is not
+ * stays as plain text rather than linking somewhere wrong.
+ */
+function withCitationChips(content: string, citations: QueryCitation[]) {
+  return content.split(/(\[\d+\])/g).map((part, i) => {
+    const n = /^\[(\d+)\]$/.exec(part)?.[1];
+    const citation = n ? citations[Number(n) - 1] : undefined;
+    return citation ? (
+      <CitationChip key={i} citation={citation} index={Number(n) - 1} />
+    ) : (
+      <Fragment key={i}>{part}</Fragment>
+    );
+  });
+}
 
 interface ChatMessageProps {
   message: QueryMessage;
@@ -56,15 +75,16 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       </Box>
       <Box sx={{ minWidth: 0, flexGrow: 1 }}>
         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", lineHeight: 1.65 }}>
-          {message.content}
-          {message.citations.map((citation, index) => (
-            <CitationChip
-              key={`${citation.document_id}-${index}`}
-              citation={citation}
-              index={index}
-            />
-          ))}
+          {withCitationChips(message.content, message.citations)}
         </Typography>
+
+        {message.ungrounded && (
+          <Alert severity="warning" variant="outlined" sx={{ mt: 1.5, py: 0 }}>
+            This answer doesn&apos;t cite any of the passages that were found.
+            Treat it as unverified.
+          </Alert>
+        )}
+
         <SourcesList citations={message.citations} />
       </Box>
     </Stack>
