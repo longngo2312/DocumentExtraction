@@ -11,6 +11,12 @@ docker compose up --build
 
 Open http://localhost:5173, register, define a schema ("invoice number: text, total: number, due date: date"), and upload a file. Each extracted value comes back with the quote it was taken from, highlighted on the page.
 
+![Reviewing a syllabus: the PDF on the left with the source quote highlighted, extracted fields with confidence and review buttons on the right](docs/screenshots/review.png)
+
+| Summary                                                                       | Chat with citations                                                             | Dashboard                                                     |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| ![Generated summary with key findings and items to check by hand](docs/screenshots/summary.png) | ![Chat answering about exam dates with numbered citations](docs/screenshots/chat.png) | ![Dashboard with a single ask-or-extract box](docs/screenshots/dashboard.png) |
+
 ## How it works
 
 1. **Define a schema.** Fields typed as `text`, `number`, `date`, `boolean` or `enum`.
