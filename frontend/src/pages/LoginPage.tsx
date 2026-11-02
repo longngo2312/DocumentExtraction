@@ -19,13 +19,13 @@ import { useAuthStore } from "../stores/authStore";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const setAuth = useAuthStore((s) => s.setAuth);
+  const setAuth = useAuthStore((s) => s.setAuth); //state for authentication
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
+  const [role, setRole] = useState<"user" | "admin">("user"); //set the role for different workspace
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -43,17 +43,28 @@ export default function LoginPage() {
 
   return (
     <AuthLayout
-      title="Welcome back"
-      subtitle="Log in to manage your schemas and documents."
+      title={role === "user" ? "Welcome Back" : "Log in to the admin console"}
+      subtitle={
+        role === "user"
+          ? "Log in to manage your schemas and documents."
+          : "Manage users, usage, billing and the job queue"
+      }
       footer={
         <Typography variant="body2" color="text.secondary">
           Don't have an account?{" "}
-          <MuiLink component={RouterLink} to="/register" sx={{ fontWeight: 600 }}>
+          <MuiLink
+            component={RouterLink}
+            to="/register"
+            sx={{ fontWeight: 600 }}
+          >
             Sign up
           </MuiLink>
         </Typography>
       }
+      role={role}
+      setRole={setRole}
     >
+      {/*Children Props*/}
       <Box component="form" onSubmit={handleSubmit}>
         <Stack spacing={2.5}>
           {error && <Alert severity="error">{error}</Alert>}

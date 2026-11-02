@@ -1,4 +1,11 @@
-import { Box, Paper, Stack, Typography } from "@mui/material";
+import {
+  Box,
+  Paper,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from "@mui/material";
 import type { ReactNode } from "react";
 import Brand from "../layout/Brand";
 
@@ -7,6 +14,8 @@ interface AuthLayoutProps {
   subtitle: string;
   children: ReactNode;
   footer: ReactNode;
+  role: String;
+  setRole: (value: string) => void;
 }
 
 export default function AuthLayout({
@@ -14,6 +23,8 @@ export default function AuthLayout({
   subtitle,
   children,
   footer,
+  role,
+  setRole,
 }: AuthLayoutProps) {
   return (
     <Box
@@ -33,12 +44,14 @@ export default function AuthLayout({
         },
       }}
     >
+      {/* Background box */}
       <Box sx={{ width: "100%", maxWidth: 420 }}>
+        {/* Logo + Welcome-back + subtitle stack */}
         <Stack spacing={1} sx={{ alignItems: "center", mb: 3 }}>
-          <Brand size={48} showWordmark={false} />
-          <Typography variant="h5">
-            {title}
-          </Typography>
+          {/*Document Extraction Logo*/}
+          <Brand size={50} showWordmark={false} />
+
+          <Typography variant="h5">{title}</Typography>
           <Typography
             variant="body2"
             color="text.secondary"
@@ -46,9 +59,23 @@ export default function AuthLayout({
           >
             {subtitle}
           </Typography>
+          {role && setRole && (
+            <ToggleButtonGroup
+              value={role}
+              exclusive
+              fullWidth
+              onChange={(e, value) => value && setRole(value)}
+            >
+              <ToggleButton value="user">User</ToggleButton>
+              <ToggleButton value="admin">Admin</ToggleButton>
+            </ToggleButtonGroup>
+          )}
         </Stack>
 
-        <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 4 }, borderRadius: 3 }}>
+        <Paper
+          variant="outlined"
+          sx={{ p: { xs: 2.5, sm: 4 }, borderRadius: 3 }}
+        >
           {children}
         </Paper>
 
