@@ -1,0 +1,1 @@
+Define a schema, drop in a PDF, and every field comes back with the exact quote it was taken from, highlighted on the page. Review it, then ask questions across everything you've checked and get answers with citations. DocExtract runs entirely on your own machine: Ollama, Qdrant, SQLite.
