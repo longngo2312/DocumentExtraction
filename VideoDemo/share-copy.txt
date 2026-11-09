@@ -1,0 +1,1 @@
+Copying values out of PDFs by hand, then flipping back through pages to check them, is how important details get lost. DocExtract fills your schema from any document, ties every value to the exact quote it came from, and lets you ask cited questions across everything you've reviewed, all on your own machine. Capture → Extract → Search → Share.

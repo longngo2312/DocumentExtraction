@@ -7,4 +7,6 @@ CLAUDE.md
 api/perf-probe.ts
 api/eng.traineddata
 .env
-brag-output-2026-11-08-105412/work
+VideoDemo/work
+VideoDemo/composition
+.agents/skills/brag-slim
