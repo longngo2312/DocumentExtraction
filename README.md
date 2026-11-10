@@ -2,6 +2,10 @@
 
 **Turn PDFs, scans and Office files into structured data you can check against the source, then ask questions across everything you've reviewed. It all runs on your own machine.**
 
+[![Demo video: defining a schema, extracting values with source quotes, reviewing them, and asking cited questions](VideoDemo/brag.jpg)](https://longngo2312.github.io/jackngo-website/videos/docextract-demo.mp4)
+
+▶ **[Watch the demo](https://longngo2312.github.io/jackngo-website/videos/docextract-demo.mp4)** (~1:40, narrated)
+
 ```bash
 cp api/.env.example api/.env        # then set JWT_SECRET (see below)
 ollama pull qwen2.5:7b-instruct-q4_K_M
