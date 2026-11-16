@@ -1,11 +1,11 @@
 import { Box, Stack, Typography } from "@mui/material";
 import Brand from "../layout/Brand";
 
-interface EmptyChatStateProps {
-  onPick: (question: string) => void;
-}
+// interface EmptyChatStateProps {
+//   onPick: (question: string) => void;
+// }
 
-export default function EmptyChatState({ onPick }: EmptyChatStateProps) {
+export default function EmptyChatState() {
   return (
     <Box
       sx={{
