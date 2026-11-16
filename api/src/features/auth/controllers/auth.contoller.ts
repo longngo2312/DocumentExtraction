@@ -66,12 +66,12 @@ export async function register(
 
 export async function login(req: Request<{}, {}, LoginBody>, res: Response) {
   try {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
 
-    if (!email?.trim() || !password) {
+    if (!username?.trim() || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email and password are required.",
+        message: "username and password are required.",
       });
     }
 

@@ -2,16 +2,22 @@ import type { DocumentSchema } from "../../schema/models/schema.model.js";
 import type { SchemaJson } from "../models/extraction.model.js";
 
 /**
- * Assembles the user message: document-type context, the field list split by
- * mode, the document, then a one-line restatement of the task.
+ * Assembles the user message: document-type context, the document, then the
+ * field list split by mode, then a one-line restatement of the task.
  *
- * The two field sections are separate rather than one list because a 7B model
+ * The document comes BEFORE the questions, which is the opposite of the obvious
+ * order and is load-bearing. Measured on a payroll invoice whose fields were
+ * named f1..f6 — so the column description was the only thing saying what to
+ * extract — the model answered 1 of 10 correctly with the questions first, and
+ * 6 of 10 with them last. With the typed answers in schemaToJsonSchema it
+ * reaches 10 of 10. Questions placed before a long document sit thousands of
+ * tokens from the text that answers them, and the model falls back to guessing
+ * from the field's name; a field called "total" went on returning the invoice
+ * total while its description asked for the tax withheld.
+ *
+ * The two field sections stay separate rather than one list because a 7B model
  * will not reliably notice that "this field has a description, therefore I
  * should answer it instead of copying" — the section header has to say so.
- *
- * The restatement after the document is deliberate. The document runs to
- * MAX_INPUT_CHARS, so without it the instructions sit thousands of tokens
- * upstream of where the model starts generating.
  */
 export function buildExtractionPrompt(
   schema: DocumentSchema | undefined,
@@ -28,11 +34,14 @@ export function buildExtractionPrompt(
     sections.push(context.join("\n"));
   }
 
+  sections.push(["Document:", '"""', inputText, '"""'].join("\n"));
+
   if (schemaJson.derivedFields.length) {
     sections.push(
       [
         "QUESTIONS TO ANSWER — for each of these, work out the answer from the " +
-          "document and return the answer itself, not the text you found it in:",
+          "document above and return the answer itself, not the text you found " +
+          "it in:",
         schemaJson.derivedFields.join("\n"),
       ].join("\n"),
     );
@@ -42,13 +51,11 @@ export function buildExtractionPrompt(
     sections.push(
       [
         "VALUES TO COPY — for each of these, return the literal value exactly " +
-          "as the document writes it:",
+          "as the document above writes it:",
         schemaJson.verbatimFields.join("\n"),
       ].join("\n"),
     );
   }
-
-  sections.push(["Document:", '"""', inputText, '"""'].join("\n"));
 
   const closing = schemaJson.derivedFields.length
     ? "Answer each question above with the answer itself — short and direct, " +

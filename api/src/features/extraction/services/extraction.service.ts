@@ -126,7 +126,14 @@ function readAnswer(
   if (typeof field !== "object" || field === null) return empty;
 
   const obj = field as Record<string, unknown>;
-  const value = typeof obj.value === "string" ? obj.value : null;
+  // Number and yes/no questions now come back as real numbers or true/false,
+  // not text. Turn them into text so coerce() can handle every type the same way.
+  const value =
+    typeof obj.value === "string"
+      ? obj.value
+      : typeof obj.value === "number" || typeof obj.value === "boolean"
+        ? String(obj.value)
+        : null;
   const quote = typeof obj.quote === "string" ? obj.quote : null;
   const page =
     typeof obj.page === "number" && Number.isInteger(obj.page)
