@@ -89,7 +89,15 @@ const SYSTEM_PROMPT =
   "field key is not a match if its meaning is different.\n\n" +
   "Inventing a quote is the worst thing you can do. Stretching a real quote " +
   "past what it says is the second worst. A null value with basis \"absent\" " +
-  "beats both.";
+  "beats both.\n\n" +
+  'Every question to answer also has an "asks_for" key, written BEFORE the ' +
+  "value. Build it from the question itself: list each thing the question " +
+  "names, using the question's own words, in the order it names them. Do not " +
+  "add things the question did not name, and do not leave out any it did - if " +
+  'a question asks for "date of birth and place of birth", the list is "date ' +
+  'of birth", "place of birth". Then write a value that answers every item on ' +
+  "that list, using your own words when the question asks you to summarize. " +
+  "A value that answers only some of the list is wrong.";
 
 const BASIS_VALUES: ReadonlySet<string> = new Set([
   "stated",

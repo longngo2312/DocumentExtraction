@@ -12,10 +12,10 @@ export function register(username: string, email: string, password: string) {
   });
 }
 
-export function login(email: string, password: string, rememberMe = false) {
+export function login(username: string, password: string, rememberMe = false) {
   return apiFetch<AuthResponse>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password, rememberMe }),
+    body: JSON.stringify({ username, password, rememberMe }),
   });
 }
 

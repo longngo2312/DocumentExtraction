@@ -78,12 +78,24 @@ export function schemaToJsonSchema(columns: SchemaColumns[]): SchemaJson {
     // the model skips, and `confidence` is the first to go — it is the hardest.
     const answerKeys = ["value", "quote", "page", "basis", "confidence", "reasoning"];
 
+    // For a question, the model first lists each thing the question asks for,
+    // then answers. Without this list it answers the first easy part and stops
+    // (e.g. gives the university but leaves out the coursework that was asked for).
+    const checklist = description
+      ? { asks_for: { type: "array", items: { type: "string" } } }
+      : {};
+    const keys = description ? ["asks_for", ...answerKeys] : answerKeys;
+
     if (col.data_type === "enum" && col.enum_options) {
       const options: string[] = JSON.parse(col.enum_options);
       properties[slug] = {
         type: "object",
-        properties: { value: { enum: [...options, null] }, ...answerProps },
-        required: answerKeys,
+        properties: {
+          ...checklist,
+          value: { enum: [...options, null] },
+          ...answerProps,
+        },
+        required: keys,
         additionalProperties: false,
       };
 
@@ -93,10 +105,11 @@ export function schemaToJsonSchema(columns: SchemaColumns[]): SchemaJson {
       properties[slug] = {
         type: "object",
         properties: {
+          ...checklist,
           value: valueType(col.data_type, description),
           ...answerProps,
         },
-        required: answerKeys,
+        required: keys,
         additionalProperties: false,
       };
 
