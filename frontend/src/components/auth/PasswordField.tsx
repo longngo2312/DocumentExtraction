@@ -1,56 +1,59 @@
-import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
-import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import { IconButton, InputAdornment, TextField } from "@mui/material";
-import { useState } from "react";
+import { Button, InputAdornment } from "@mui/material";
+import { useState, type ReactNode } from "react";
+import LabeledField from "./LabeledField";
 
 interface PasswordFieldProps {
   value: string;
   onChange: (value: string) => void;
   label?: string;
+  labelAction?: ReactNode;
+  placeholder?: string;
   helperText?: string;
   autoComplete?: string;
   disabled?: boolean;
+  error?: boolean;
 }
 
 export default function PasswordField({
   value,
   onChange,
   label = "Password",
+  labelAction,
+  placeholder = "••••••••",
   helperText,
   autoComplete = "current-password",
   disabled,
+  error,
 }: PasswordFieldProps) {
   const [visible, setVisible] = useState(false);
 
   return (
-    <TextField
+    <LabeledField
       label={label}
+      labelAction={labelAction}
+      placeholder={placeholder}
       type={visible ? "text" : "password"}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       helperText={helperText}
       autoComplete={autoComplete}
       disabled={disabled}
-      fullWidth
+      error={error}
       required
       slotProps={{
         input: {
           endAdornment: (
             <InputAdornment position="end">
-              <IconButton
+              <Button
                 onClick={() => setVisible((previous) => !previous)}
-                edge="end"
                 size="small"
-                // Without this the button is announced as unlabelled.
+                color="inherit"
                 aria-label={visible ? "Hide password" : "Show password"}
                 tabIndex={-1}
+                sx={{ minWidth: 0, px: 1.25, fontSize: 12, fontWeight: 600, color: "text.secondary", textTransform: "none" }}
               >
-                {visible ? (
-                  <VisibilityOffOutlinedIcon fontSize="small" />
-                ) : (
-                  <VisibilityOutlinedIcon fontSize="small" />
-                )}
-              </IconButton>
+                {visible ? "Hide" : "Show"}
+              </Button>
             </InputAdornment>
           ),
         },

@@ -15,6 +15,7 @@ import type {
   QueryCitation,
   Source,
 } from "../models/rag.model.js";
+import { OVERVIEW_SQL } from "../sql/overview.sql.js";
 import { searchPassages } from "./retrieval.service.js";
 import {
   VALUE_OPS,
@@ -27,7 +28,16 @@ import {
 
 export const REFUSAL = "The documents I have access to do not cover this.";
 
-type Tool = "search_passages" | "query_values" | "both";
+type Tool =
+  | "search_passages"
+  | "query_values"
+  | "both"
+  | "document_overview"
+  | "about_app"
+  | "general_knowledge";
+
+/** The three tools that read the user's documents. */
+const DOCUMENT_TOOLS: Tool[] = ["search_passages", "query_values", "both"];
 
 interface Route {
   tool: Tool;
@@ -41,17 +51,25 @@ const ROUTE_SYSTEM = `You decide how to look up the answer to a question about t
 
 Tools:
 - search_passages: finds passages of text. Use for what a document says, explains or describes, and for anything that is not about one specific field.
-- query_values: looks up a structured field that was extracted from every document and checked by a reviewer. Use for counting, listing, filtering or comparing a field across documents — "how many", "which documents", "list every", "more than", "before <date>".
+- query_values: looks up a structured field that was extracted from every document and checked by a reviewer. Use for counting, listing, filtering or comparing a field across documents — "how many", "which documents", "list every", "more than", "before <date>". If the question names one of the fields listed below and compares it against a value, this is the tool, whatever word the question starts with: "which agreements have a monthly fee over 10000" and "how many are governed by Texas law" are both query_values.
 - both: when the question needs a field lookup and an explanation from the text.
+- document_overview: describes what a whole document contains. Use for "summarize this document", "what is this file about", "what are the key findings", "what did you find in the one I just uploaded".
+- about_app: the question is about you — what you can do, how you work, what file types you accept — or it is a greeting with no question in it.
+- general_knowledge: the question is not about the user's documents or about you at all. Everyday conversation, or a fact about the world.
 
 For query_values, set column to one of the listed fields, op to one of: any (has a value), eq, contains, gt, gte, lt, lte — and value to what it is compared with. Comparisons need a plain number or an ISO date (YYYY-MM-DD).
 
 Always set search_query: the question rewritten to stand on its own, resolving words like "it" or "that one" from the conversation.`;
 
 function routeSchema(columns: ColumnInfo[]) {
-  const tools: Tool[] = columns.length
-    ? ["search_passages", "query_values", "both"]
-    : ["search_passages"];
+  // The field-lookup tools are only offered when there are fields to look up.
+  const tools: Tool[] = [
+    "search_passages",
+    ...(columns.length ? (["query_values", "both"] as Tool[]) : []),
+    "document_overview",
+    "about_app",
+    "general_knowledge",
+  ];
   return {
     type: "object",
     properties: {
@@ -61,7 +79,10 @@ function routeSchema(columns: ColumnInfo[]) {
         ? {
             column: { type: "string", enum: columns.map((c) => c.name) },
             op: { type: "string", enum: VALUE_OPS },
-            value: { type: "string" },
+            // A number, not only a string: asked for a fee over 10000 the
+            // model returned an empty value rather than put a number in a
+            // string, and the whole lookup was then discarded below.
+            value: { type: ["string", "number"] },
           }
         : {}),
     },
@@ -71,15 +92,27 @@ function routeSchema(columns: ColumnInfo[]) {
 
 function transcript(history: HistoryTurn[]): string {
   return history
-    .map((turn) => `${turn.role === "user" ? "User" : "Assistant"}: ${turn.content}`)
+    .map(
+      (turn) =>
+        `${turn.role === "user" ? "User" : "Assistant"}: ${turn.content}`,
+    )
     .join("\n");
 }
 
-/**
- * Constrained decoding is not a security boundary, so every field is checked
- * again here. Anything off the fixed surface degrades to a plain passage
- * search rather than reaching a query.
- */
+export function comparisonValue(question: string): string {
+  const iso = question.match(/\d{4}-\d{2}-\d{2}/);
+  if (iso) return iso[0];
+
+  // Prefer a figure introduced by a comparison word, so "fees over 10000 in
+  // 2026" compares against 10000 rather than against the year.
+  const led = question.match(
+    /(?:over|above|under|below|more than|less than|greater than|at least|at most|exceeds?|before|after)\s+\$?([\d,]+(?:\.\d+)?)/i,
+  );
+  const last = [...question.matchAll(/\$?([\d,]+(?:\.\d+)?)/g)].pop();
+  const picked = led?.[1] ?? last?.[1];
+  return picked ? picked.replace(/,/g, "") : "";
+}
+
 export function validateRoute(
   raw: unknown,
   question: string,
@@ -93,22 +126,43 @@ export function validateRoute(
       ? out.search_query.trim()
       : question;
 
-  let tool: Tool = ["search_passages", "query_values", "both"].includes(
-    out.tool as string,
-  )
+  const ALL_TOOLS: string[] = [
+    ...DOCUMENT_TOOLS,
+    "document_overview",
+    "about_app",
+    "general_knowledge",
+  ];
+  let tool: Tool = ALL_TOOLS.includes(out.tool as string)
     ? (out.tool as Tool)
     : "search_passages";
 
   let values: ValueQuery | null = null;
-  if (tool !== "search_passages") {
+  if (tool === "query_values" || tool === "both") {
+    // Compared without spaces, underscores or case: the model answers a field
+    // called monthly_fee as "monthly fee" about a third of the time, and an
+    // exact compare threw that lookup away and left the question unanswered.
+    const plain = (name: string) =>
+      name.toLowerCase().replace(/[^a-z0-9]/g, "");
     const column = columns.find(
-      (c) => c.name.toLowerCase() === String(out.column ?? "").toLowerCase(),
+      (c) => plain(c.name) === plain(String(out.column ?? "")),
     );
-    const op = VALUE_OPS.includes(out.op as ValueOp) ? (out.op as ValueOp) : null;
-    const value = typeof out.value === "string" ? out.value.slice(0, 200) : "";
+    const op = VALUE_OPS.includes(out.op as ValueOp)
+      ? (out.op as ValueOp)
+      : null;
+    const value =
+      typeof out.value === "number"
+        ? String(out.value)
+        : typeof out.value === "string"
+          ? out.value.slice(0, 200)
+          : "";
 
-    if (column && op && (op === "any" || value.trim())) {
-      values = { column: column.name, op, value };
+    // An empty value is filled from the question rather than wasting the
+    // correct column and operator the model did choose.
+    const figure =
+      op && op !== "any" && !value.trim() ? comparisonValue(question) : value;
+
+    if (column && op && (op === "any" || figure.trim())) {
+      values = { column: column.name, op, value: figure };
     } else {
       tool = "search_passages";
     }
@@ -122,11 +176,6 @@ async function routeQuestion(
   history: HistoryTurn[],
   columns: ColumnInfo[],
 ): Promise<Route> {
-  // Nothing to choose and nothing to resolve: skip the call entirely.
-  if (columns.length === 0 && history.length === 0) {
-    return { tool: "search_passages", searchQuery: question, values: null };
-  }
-
   const fields = columns.length
     ? `Fields available for query_values:\n${columns.map((c) => `- ${c.name} (${c.data_type})`).join("\n")}`
     : "No structured fields exist yet — use search_passages.";
@@ -174,6 +223,149 @@ function stripMarkers(text: string): string {
   return text.replace(/\s*\[\d+(?:\s*[-–,]\s*\d+)*\]/g, "");
 }
 
+// ─── Answers that do not come from a passage search ──────────────────────────
+
+/**
+ * What to say when asked what this app does.
+ *
+ * The facts are listed here so the model describes the real product instead of
+ * guessing at features from its name.
+ */
+const ABOUT_APP_SYSTEM = `You are the assistant inside a document extraction app. Answer briefly and warmly, in the first person, using only the facts below. If you are asked something about the app that is not listed here, say you are not sure rather than guessing.
+
+What the app does:
+- The user defines a schema: a list of fields they want pulled out of every document, each with a description saying what to extract.
+- They upload files: PDF, Word, Excel, PowerPoint, images, or plain text, up to 25MB. Scanned pages and photos go through OCR.
+- A local AI model fills in the schema for each document. Every value comes with the exact sentence it was taken from, highlighted on the page.
+- The user reviews each value and accepts, edits or rejects it.
+- Then they can ask me questions across their documents, and I answer with citations they can click to jump to the source.
+- I can also summarize any single document.
+- Everything runs on the user's own machine. No document ever leaves it.
+
+What I cannot do: add up or average numbers across documents, and answer about documents that have not finished processing.`;
+
+/** Plain conversation, for questions that are not about the documents or the app. */
+const GENERAL_SYSTEM = `You are a helpful assistant inside a document extraction app. Answer the question briefly and plainly.
+
+For this answer you are not looking at any of the user's documents, so do not claim anything about what their documents contain. If the question turns out to need their documents, say so and invite them to ask again about a specific document.`;
+
+async function talk(
+  system: string,
+  question: string,
+  history: HistoryTurn[],
+): Promise<string> {
+  return chat([
+    { role: "system", content: system },
+    ...history.map((turn) => ({
+      role: turn.role,
+      content: stripMarkers(turn.content),
+    })),
+    { role: "user", content: question },
+  ]);
+}
+
+interface SummaryRow {
+  filename: string;
+  overview: string;
+  key_findings: string;
+  caveats: string;
+}
+
+/**
+ * Picks which document a summary question is about: the one the page is scoped
+ * to, else one the question names, else the most recently uploaded.
+ */
+function pickDocument(
+  db: Database.Database,
+  question: string,
+  documentId?: number,
+): { id: number; others: number } | null {
+  const rows = db.prepare(OVERVIEW_SQL.listWithSummary).all() as {
+    id: number;
+    filename: string;
+  }[];
+  if (rows.length === 0) return null;
+  const others = rows.length - 1;
+
+  if (documentId && rows.some((row) => row.id === documentId)) {
+    return { id: documentId, others };
+  }
+
+  // "summarize the meridian agreement" should not return whatever was newest.
+  const asked = question.toLowerCase();
+  let best: { id: number; score: number } | null = null;
+  for (const row of rows) {
+    const words = row.filename
+      .replace(/\.[^.]+$/, "")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((word) => word.length >= 4);
+    const score = words.filter((word) => asked.includes(word)).length;
+    if (score > 0 && (!best || score > best.score))
+      best = { id: row.id, score };
+  }
+
+  return { id: best ? best.id : rows[0].id, others };
+}
+
+/**
+ * Answers "summarize this document" from the summary already stored for it.
+ *
+ * Assembled here rather than sent through the model: the text is already
+ * written, so repeating it costs a minute of generation and risks changing it.
+ * Returns null when there is no summary, so the caller can fall back to search.
+ */
+function overviewAnswer(
+  db: Database.Database,
+  question: string,
+  documentId?: number,
+): AnswerResult | null {
+  const picked = pickDocument(db, question, documentId);
+  if (!picked) return null;
+
+  const row = db.prepare(OVERVIEW_SQL.byDocument).get(picked.id) as
+    | SummaryRow
+    | undefined;
+  if (!row) return null;
+
+  const list = (raw: string): string[] => {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.filter((x) => typeof x === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const parts = [`**${row.filename}**`, "", row.overview];
+  const findings = list(row.key_findings);
+  if (findings.length) {
+    parts.push(
+      "",
+      "Key findings:",
+      ...findings.map((f) => `- ${f.replace(/^[-•]\s*/, "")}`),
+    );
+  }
+  const caveats = list(row.caveats);
+  if (caveats.length) {
+    parts.push(
+      "",
+      "Worth checking by hand:",
+      ...caveats.map((c) => `- ${c.replace(/^[-•]\s*/, "")}`),
+    );
+  }
+  if (!documentId && picked.others > 0) {
+    parts.push(
+      "",
+      `You have ${picked.others} other summarized document${picked.others === 1 ? "" : "s"} — name one to summarize it instead.`,
+    );
+  }
+
+  return { content: parts.join("\n"), citations: [], ungrounded: false };
+}
+
 // ─── Verify ──────────────────────────────────────────────────────────────────
 
 const MARKER = /\[(\d+(?:\s*[-–,]\s*\d+)*)\]/g;
@@ -205,7 +397,9 @@ export function verifyCitations(
 
     const valid = [
       ...new Set(
-        numbers.filter((n) => Number.isInteger(n) && n >= 1 && n <= sourceCount),
+        numbers.filter(
+          (n) => Number.isInteger(n) && n >= 1 && n <= sourceCount,
+        ),
       ),
     ];
     return valid
@@ -255,6 +449,31 @@ export async function answerQuestion(
   const columns = listColumns(db);
   const route = await routeQuestion(question, history, columns);
 
+  // Questions that are not a search over the documents. Handled before
+  // retrieval, because searching for passages that answer "hi, what can you
+  // do" finds nothing and used to end in a refusal.
+  if (route.tool === "about_app") {
+    return {
+      content: await talk(ABOUT_APP_SYSTEM, question, history),
+      citations: [],
+      ungrounded: false,
+    };
+  }
+  if (route.tool === "general_knowledge") {
+    return {
+      content: await talk(GENERAL_SYSTEM, question, history),
+      citations: [],
+      // Nothing backs this up in the user's documents, and the chat marks it.
+      ungrounded: true,
+    };
+  }
+  if (route.tool === "document_overview") {
+    const overview = overviewAnswer(db, question, documentId);
+    // No summary to read: fall through and search the text instead.
+    if (overview) return overview;
+    route.tool = "search_passages";
+  }
+
   const sources: Source[] = [];
   let lookupSummary: string | null = null;
 
@@ -263,8 +482,10 @@ export async function answerQuestion(
       ...(await searchPassages(db, userId, route.searchQuery, documentId)),
     );
   }
+  let valueSources: Source[] = [];
   if (route.values) {
     const result = queryValues(db, route.values, documentId);
+    valueSources = result.sources;
     sources.push(...result.sources);
     lookupSummary = result.summary;
   }
@@ -276,7 +497,12 @@ export async function answerQuestion(
   // dropped if passages answer: "0 documents match" beside a passage stating
   // the answer would contradict it.
   if (route.tool === "query_values" && sources.length === 0) {
-    const passages = await searchPassages(db, userId, route.searchQuery, documentId);
+    const passages = await searchPassages(
+      db,
+      userId,
+      route.searchQuery,
+      documentId,
+    );
     if (passages.length > 0) {
       sources.push(...passages);
       lookupSummary = null;
@@ -288,6 +514,25 @@ export async function answerQuestion(
     citations: QueryCitation[] = [],
     ungrounded = false,
   ): AnswerResult => ({ content, citations, ungrounded });
+
+  // A field lookup is answered from the lookup itself, with no generation step.
+  // The count and the matching rows come from SQL, so they are already exact;
+  // asking the model to put them into a sentence only invites it to get the
+  // arithmetic wrong. Asked which agreements cost over $10,000 a month it
+  // answered "$31,750.00 and $4,200.00. Both exceed $10,000 per month."
+  if (lookupSummary && valueSources.length > 0) {
+    const lines = valueSources.map(
+      (source) => `- ${source.filename} — ${source.text}`,
+    );
+    return reply(
+      [
+        `${lookupSummary} Only values accepted or corrected in review are counted.`,
+        "",
+        ...lines,
+      ].join("\n"),
+      valueSources.map(toCitation),
+    );
+  }
 
   // Nothing relevant found: say so without asking the model. It cannot invent
   // an answer it was never asked for, and the user gets the refusal in
@@ -311,16 +556,28 @@ export async function answerQuestion(
     { role: "system", content: ANSWER_SYSTEM },
     // History carries the conversation, never the old sources — those belong
     // to a turn this one cannot see, and would crowd the 8192 window.
-    ...history.map((turn) => ({ role: turn.role, content: stripMarkers(turn.content) })),
+    ...history.map((turn) => ({
+      role: turn.role,
+      content: stripMarkers(turn.content),
+    })),
     { role: "user", content: prompt },
   ]);
 
   const verified = verifyCitations(raw, sources.length);
   const refused = verified.text.includes(REFUSAL.replace(/\.$/, ""));
 
+  // came from the database, so it stands even when the model declined to use it.
+  if (refused) {
+    return reply(
+      lookupSummary
+        ? `${lookupSummary} Only values accepted or corrected in review are counted.`
+        : REFUSAL,
+    );
+  }
+
   return reply(
     verified.text,
-    refused ? [] : verified.used.map((i) => toCitation(sources[i])),
-    !refused && verified.used.length === 0,
+    verified.used.map((i) => toCitation(sources[i])),
+    verified.used.length === 0,
   );
 }

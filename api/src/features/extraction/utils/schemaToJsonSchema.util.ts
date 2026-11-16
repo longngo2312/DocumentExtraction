@@ -8,7 +8,7 @@ function dedupeSlug(slug: string, used: Set<string>): string {
   return `${slug}_${suffix}`;
 }
 
-function slugify(name: string, used: Set<string>): string {
+function slugify(name: string, used: Set<string>, position: number): string {
   const base = name
     .trim()
     .toLowerCase()
@@ -18,11 +18,23 @@ function slugify(name: string, used: Set<string>): string {
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-  const slug = dedupeSlug(base, used);
+  // A name with no ASCII word characters at all — "给与", "%" — strips to the
+  // empty string, and an empty JSON key cannot be read back out of the answer.
+  const slug = dedupeSlug(base || `field_${position + 1}`, used);
   used.add(slug);
   return slug;
 }
 
+
+function valueType(
+  dataType: SchemaColumns["data_type"],
+  description: string,
+): Record<string, unknown> {
+  if (!description) return { type: ["string", "null"] };
+  if (dataType === "number") return { type: ["number", "null"] };
+  if (dataType === "boolean") return { type: ["boolean", "null"] };
+  return { type: ["string", "null"] };
+}
 
 function buildFieldLine(
   slug: string,
@@ -42,8 +54,8 @@ export function schemaToJsonSchema(columns: SchemaColumns[]): SchemaJson {
   const usedSlugs = new Set<string>();
   const required: string[] = [];
 
-  for (const col of columns) {
-    const slug = slugify(col.name, usedSlugs);
+  for (const [position, col] of columns.entries()) {
+    const slug = slugify(col.name, usedSlugs, position);
 
     // A description turns the column into a question to answer rather than a
     // span to copy. The frontend defaults it to "", so trim before testing —
@@ -66,12 +78,24 @@ export function schemaToJsonSchema(columns: SchemaColumns[]): SchemaJson {
     // the model skips, and `confidence` is the first to go — it is the hardest.
     const answerKeys = ["value", "quote", "page", "basis", "confidence", "reasoning"];
 
+    // For a question, the model first lists each thing the question asks for,
+    // then answers. Without this list it answers the first easy part and stops
+    // (e.g. gives the university but leaves out the coursework that was asked for).
+    const checklist = description
+      ? { asks_for: { type: "array", items: { type: "string" } } }
+      : {};
+    const keys = description ? ["asks_for", ...answerKeys] : answerKeys;
+
     if (col.data_type === "enum" && col.enum_options) {
       const options: string[] = JSON.parse(col.enum_options);
       properties[slug] = {
         type: "object",
-        properties: { value: { enum: [...options, null] }, ...answerProps },
-        required: answerKeys,
+        properties: {
+          ...checklist,
+          value: { enum: [...options, null] },
+          ...answerProps,
+        },
+        required: keys,
         additionalProperties: false,
       };
 
@@ -80,8 +104,12 @@ export function schemaToJsonSchema(columns: SchemaColumns[]): SchemaJson {
     } else {
       properties[slug] = {
         type: "object",
-        properties: { value: { type: ["string", "null"] }, ...answerProps },
-        required: answerKeys,
+        properties: {
+          ...checklist,
+          value: valueType(col.data_type, description),
+          ...answerProps,
+        },
+        required: keys,
         additionalProperties: false,
       };
 

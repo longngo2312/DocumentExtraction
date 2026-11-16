@@ -15,6 +15,15 @@ const OLLAMA_EMBED_URL = `${OLLAMA_BASE}/api/embed`;
 export const EMBED_MODEL = "nomic-embed-text";
 export const EMBED_DIMENSIONS = 768;
 const EMBED_BATCH_SIZE = 32;
+export const NUM_CTX = 16384;
+
+/**
+ * Generous because the first call after a restart pays to load the model onto
+ * the GPU on top of its own generation: a 10-field extraction measured past
+ * 120s that way, which failed the job and logged it as if the document were at
+ * fault. Halved generation speed at NUM_CTX 16384 makes that likelier.
+ */
+const REQUEST_TIMEOUT_MS = 300_000;
 
 /**
  * undici reports an unreachable host as a bare "fetch failed", and a timeout as
@@ -25,7 +34,7 @@ const EMBED_BATCH_SIZE = 32;
 export function describeNetworkError(error: unknown): string {
   const name = (error as { name?: string })?.name;
   if (name === "TimeoutError" || name === "AbortError") {
-    return `Ollama did not respond within 120s. The model may still be loading — check \`ollama ps\`.`;
+    return `Ollama did not respond within ${REQUEST_TIMEOUT_MS / 1000}s. The model may still be loading — check \`ollama ps\`.`;
   }
   return (
     `Cannot reach Ollama at ${OLLAMA_URL}. Is it running? Start it with \`ollama serve\`. ` +
@@ -44,7 +53,7 @@ async function postOllama<T>(url: string, body: object): Promise<T> {
     response = await fetch(url, {
       method: "POST",
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
     // Retryable on purpose: Ollama being down is a transient condition, not a
@@ -68,19 +77,27 @@ type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
  * Free-text chat — the RAG answer, which is prose with [n] markers rather than
  * a JSON object, so it cannot go through `complete`. Sampling defaults are the
  * answer's: 0.2 reads less flat than 0, and 800 tokens is a long answer that
- * still leaves the 8192 window room for five passages and history.
+ * still leaves the window room for five passages and history.
  */
 export async function chat(
   messages: ChatMessage[],
   options: Record<string, number> = {},
 ): Promise<string> {
-  const result = await postOllama<{ message: { content: string } }>(OLLAMA_URL, {
-    model: OLLAMA_MODEL,
-    messages,
-    stream: false,
-    keep_alive: "30m",
-    options: { temperature: 0.2, num_ctx: 8192, num_predict: 800, ...options },
-  });
+  const result = await postOllama<{ message: { content: string } }>(
+    OLLAMA_URL,
+    {
+      model: OLLAMA_MODEL,
+      messages,
+      stream: false,
+      keep_alive: "30m",
+      options: {
+        temperature: 0.2,
+        num_ctx: NUM_CTX,
+        num_predict: 800,
+        ...options,
+      },
+    },
+  );
   return result.message.content;
 }
 
@@ -137,23 +154,26 @@ export const OllamaProvider: LlmProvider = {
   name: "ollama",
   model: OLLAMA_MODEL,
   async complete(request: LlmRequest): Promise<unknown> {
-    const result = await postOllama<{ message: { content: string } }>(OLLAMA_URL, {
-      model: OLLAMA_MODEL,
-      messages: [
-        { role: "system", content: request.system },
-        { role: "user", content: request.prompt },
-      ],
-      ...(request.schema ? { format: request.schema } : {}),
-      stream: false,
-      keep_alive: "30m",
-      options: {
-        temperature: 0,
-        num_ctx: 8192, // 6GB VRAM ceiling — see docs/phase6, do not raise
-        num_predict: 2048,
-        // Caller's options win, but only the keys it actually set.
-        ...request.options,
+    const result = await postOllama<{ message: { content: string } }>(
+      OLLAMA_URL,
+      {
+        model: OLLAMA_MODEL,
+        messages: [
+          { role: "system", content: request.system },
+          { role: "user", content: request.prompt },
+        ],
+        ...(request.schema ? { format: request.schema } : {}),
+        stream: false,
+        keep_alive: "30m",
+        options: {
+          temperature: 0,
+          num_ctx: NUM_CTX,
+          num_predict: 2048,
+          // Caller's options win, but only the keys it actually set.
+          ...request.options,
+        },
       },
-    });
+    );
     const content = result.message.content;
 
     try {

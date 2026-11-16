@@ -10,6 +10,7 @@ import Layout from "../components/layout/Layout";
 import DashboardPage from "../pages/DashboardPage";
 import DocumentGridPage from "../pages/DocumentGridPage";
 import ExtractedDocumentPage from "../pages/ExtractedDocumentPage";
+import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import LoginPage from "../pages/LoginPage";
 import NotFoundPage from "../pages/NotFoundPage";
 import ProfilePage from "../pages/ProfilePage";
@@ -32,6 +33,7 @@ const router = createBrowserRouter(
     <>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<DashboardPage />} />

@@ -33,8 +33,8 @@ export default function EmptyChatState({ onPick }: EmptyChatStateProps) {
           color="text.secondary"
           sx={{ textAlign: "center" }}
         >
-          Every answer cites the passage it came from, so you can check it against
-          the original.
+          Every answer cites the passage it came from, so you can check it
+          against the original.
         </Typography>
 
         <Stack
