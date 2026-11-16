@@ -8,3 +8,4 @@ api/perf-probe.ts
 api/eng.traineddata
 .env
 VideoDemo
+demo-files
