@@ -51,7 +51,7 @@ const ROUTE_SYSTEM = `You decide how to look up the answer to a question about t
 
 Tools:
 - search_passages: finds passages of text. Use for what a document says, explains or describes, and for anything that is not about one specific field.
-- query_values: looks up a structured field that was extracted from every document and checked by a reviewer. Use for counting, listing, filtering or comparing a field across documents — "how many", "which documents", "list every", "more than", "before <date>".
+- query_values: looks up a structured field that was extracted from every document and checked by a reviewer. Use for counting, listing, filtering or comparing a field across documents — "how many", "which documents", "list every", "more than", "before <date>". If the question names one of the fields listed below and compares it against a value, this is the tool, whatever word the question starts with: "which agreements have a monthly fee over 10000" and "how many are governed by Texas law" are both query_values.
 - both: when the question needs a field lookup and an explanation from the text.
 - document_overview: describes what a whole document contains. Use for "summarize this document", "what is this file about", "what are the key findings", "what did you find in the one I just uploaded".
 - about_app: the question is about you — what you can do, how you work, what file types you accept — or it is a greeting with no question in it.
@@ -89,7 +89,10 @@ function routeSchema(columns: ColumnInfo[]) {
 
 function transcript(history: HistoryTurn[]): string {
   return history
-    .map((turn) => `${turn.role === "user" ? "User" : "Assistant"}: ${turn.content}`)
+    .map(
+      (turn) =>
+        `${turn.role === "user" ? "User" : "Assistant"}: ${turn.content}`,
+    )
     .join("\n");
 }
 
@@ -123,10 +126,16 @@ export function validateRoute(
 
   let values: ValueQuery | null = null;
   if (tool === "query_values" || tool === "both") {
+    // Compared without spaces, underscores or case: the model answers a field
+    // called monthly_fee as "monthly fee" about a third of the time, and an
+    // exact compare threw that lookup away and left the question unanswered.
+    const plain = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
     const column = columns.find(
-      (c) => c.name.toLowerCase() === String(out.column ?? "").toLowerCase(),
+      (c) => plain(c.name) === plain(String(out.column ?? "")),
     );
-    const op = VALUE_OPS.includes(out.op as ValueOp) ? (out.op as ValueOp) : null;
+    const op = VALUE_OPS.includes(out.op as ValueOp)
+      ? (out.op as ValueOp)
+      : null;
     const value = typeof out.value === "string" ? out.value.slice(0, 200) : "";
 
     if (column && op && (op === "any" || value.trim())) {
@@ -269,7 +278,8 @@ function pickDocument(
       .split(/[^a-z0-9]+/)
       .filter((word) => word.length >= 4);
     const score = words.filter((word) => asked.includes(word)).length;
-    if (score > 0 && (!best || score > best.score)) best = { id: row.id, score };
+    if (score > 0 && (!best || score > best.score))
+      best = { id: row.id, score };
   }
 
   return { id: best ? best.id : rows[0].id, others };
@@ -298,7 +308,9 @@ function overviewAnswer(
   const list = (raw: string): string[] => {
     try {
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+      return Array.isArray(parsed)
+        ? parsed.filter((x) => typeof x === "string")
+        : [];
     } catch {
       return [];
     }
@@ -307,11 +319,19 @@ function overviewAnswer(
   const parts = [`**${row.filename}**`, "", row.overview];
   const findings = list(row.key_findings);
   if (findings.length) {
-    parts.push("", "Key findings:", ...findings.map((f) => `- ${f.replace(/^[-•]\s*/, "")}`));
+    parts.push(
+      "",
+      "Key findings:",
+      ...findings.map((f) => `- ${f.replace(/^[-•]\s*/, "")}`),
+    );
   }
   const caveats = list(row.caveats);
   if (caveats.length) {
-    parts.push("", "Worth checking by hand:", ...caveats.map((c) => `- ${c.replace(/^[-•]\s*/, "")}`));
+    parts.push(
+      "",
+      "Worth checking by hand:",
+      ...caveats.map((c) => `- ${c.replace(/^[-•]\s*/, "")}`),
+    );
   }
   if (!documentId && picked.others > 0) {
     parts.push(
@@ -354,7 +374,9 @@ export function verifyCitations(
 
     const valid = [
       ...new Set(
-        numbers.filter((n) => Number.isInteger(n) && n >= 1 && n <= sourceCount),
+        numbers.filter(
+          (n) => Number.isInteger(n) && n >= 1 && n <= sourceCount,
+        ),
       ),
     ];
     return valid
@@ -437,8 +459,10 @@ export async function answerQuestion(
       ...(await searchPassages(db, userId, route.searchQuery, documentId)),
     );
   }
+  let valueSources: Source[] = [];
   if (route.values) {
     const result = queryValues(db, route.values, documentId);
+    valueSources = result.sources;
     sources.push(...result.sources);
     lookupSummary = result.summary;
   }
@@ -450,7 +474,12 @@ export async function answerQuestion(
   // dropped if passages answer: "0 documents match" beside a passage stating
   // the answer would contradict it.
   if (route.tool === "query_values" && sources.length === 0) {
-    const passages = await searchPassages(db, userId, route.searchQuery, documentId);
+    const passages = await searchPassages(
+      db,
+      userId,
+      route.searchQuery,
+      documentId,
+    );
     if (passages.length > 0) {
       sources.push(...passages);
       lookupSummary = null;
@@ -462,6 +491,23 @@ export async function answerQuestion(
     citations: QueryCitation[] = [],
     ungrounded = false,
   ): AnswerResult => ({ content, citations, ungrounded });
+
+  // A field lookup is answered from the lookup itself, with no generation step.
+  // The count and the matching rows come from SQL, so they are already exact;
+  // asking the model to put them into a sentence only invites it to get the
+  // arithmetic wrong. Asked which agreements cost over $10,000 a month it
+  // answered "$31,750.00 and $4,200.00. Both exceed $10,000 per month."
+  if (lookupSummary && valueSources.length > 0) {
+    const lines = valueSources.map((source) => `- ${source.filename} — ${source.text}`);
+    return reply(
+      [
+        `${lookupSummary} Only values accepted or corrected in review are counted.`,
+        "",
+        ...lines,
+      ].join("\n"),
+      valueSources.map(toCitation),
+    );
+  }
 
   // Nothing relevant found: say so without asking the model. It cannot invent
   // an answer it was never asked for, and the user gets the refusal in
@@ -485,16 +531,28 @@ export async function answerQuestion(
     { role: "system", content: ANSWER_SYSTEM },
     // History carries the conversation, never the old sources — those belong
     // to a turn this one cannot see, and would crowd the 8192 window.
-    ...history.map((turn) => ({ role: turn.role, content: stripMarkers(turn.content) })),
+    ...history.map((turn) => ({
+      role: turn.role,
+      content: stripMarkers(turn.content),
+    })),
     { role: "user", content: prompt },
   ]);
 
   const verified = verifyCitations(raw, sources.length);
   const refused = verified.text.includes(REFUSAL.replace(/\.$/, ""));
 
+  // came from the database, so it stands even when the model declined to use it.
+  if (refused) {
+    return reply(
+      lookupSummary
+        ? `${lookupSummary} Only values accepted or corrected in review are counted.`
+        : REFUSAL,
+    );
+  }
+
   return reply(
     verified.text,
-    refused ? [] : verified.used.map((i) => toCitation(sources[i])),
-    !refused && verified.used.length === 0,
+    verified.used.map((i) => toCitation(sources[i])),
+    verified.used.length === 0,
   );
 }

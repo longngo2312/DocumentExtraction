@@ -1,11 +1,18 @@
-import { Box, Stack, Typography } from "@mui/material";
+import { Box, Chip, Stack, Typography } from "@mui/material";
 import Brand from "../layout/Brand";
 
-// interface EmptyChatStateProps {
-//   onPick: (question: string) => void;
-// }
+const STARTERS = [
+  "What are the key dates across my documents?",
+  "Summarise the invoices I uploaded this month.",
+  "Which documents mention a renewal clause?",
+  "What totals were extracted, and from where?",
+];
 
-export default function EmptyChatState() {
+interface EmptyChatStateProps {
+  onPick: (question: string) => void;
+}
+
+export default function EmptyChatState({ onPick }: EmptyChatStateProps) {
   return (
     <Box
       sx={{
@@ -29,6 +36,23 @@ export default function EmptyChatState() {
           Every answer cites the passage it came from, so you can check it
           against the original.
         </Typography>
+
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          sx={{ flexWrap: "wrap", justifyContent: "center", mt: 1 }}
+        >
+          {STARTERS.map((starter) => (
+            <Chip
+              key={starter}
+              label={starter}
+              variant="outlined"
+              onClick={() => onPick(starter)}
+              sx={{ cursor: "pointer", height: "auto", py: 0.75 }}
+            />
+          ))}
+        </Stack>
       </Stack>
     </Box>
   );
