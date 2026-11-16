@@ -79,7 +79,10 @@ function routeSchema(columns: ColumnInfo[]) {
         ? {
             column: { type: "string", enum: columns.map((c) => c.name) },
             op: { type: "string", enum: VALUE_OPS },
-            value: { type: "string" },
+            // A number, not only a string: asked for a fee over 10000 the
+            // model returned an empty value rather than put a number in a
+            // string, and the whole lookup was then discarded below.
+            value: { type: ["string", "number"] },
           }
         : {}),
     },
@@ -96,11 +99,20 @@ function transcript(history: HistoryTurn[]): string {
     .join("\n");
 }
 
-/**
- * Constrained decoding is not a security boundary, so every field is checked
- * again here. Anything off the fixed surface degrades to a plain passage
- * search rather than reaching a query.
- */
+export function comparisonValue(question: string): string {
+  const iso = question.match(/\d{4}-\d{2}-\d{2}/);
+  if (iso) return iso[0];
+
+  // Prefer a figure introduced by a comparison word, so "fees over 10000 in
+  // 2026" compares against 10000 rather than against the year.
+  const led = question.match(
+    /(?:over|above|under|below|more than|less than|greater than|at least|at most|exceeds?|before|after)\s+\$?([\d,]+(?:\.\d+)?)/i,
+  );
+  const last = [...question.matchAll(/\$?([\d,]+(?:\.\d+)?)/g)].pop();
+  const picked = led?.[1] ?? last?.[1];
+  return picked ? picked.replace(/,/g, "") : "";
+}
+
 export function validateRoute(
   raw: unknown,
   question: string,
@@ -129,17 +141,28 @@ export function validateRoute(
     // Compared without spaces, underscores or case: the model answers a field
     // called monthly_fee as "monthly fee" about a third of the time, and an
     // exact compare threw that lookup away and left the question unanswered.
-    const plain = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const plain = (name: string) =>
+      name.toLowerCase().replace(/[^a-z0-9]/g, "");
     const column = columns.find(
       (c) => plain(c.name) === plain(String(out.column ?? "")),
     );
     const op = VALUE_OPS.includes(out.op as ValueOp)
       ? (out.op as ValueOp)
       : null;
-    const value = typeof out.value === "string" ? out.value.slice(0, 200) : "";
+    const value =
+      typeof out.value === "number"
+        ? String(out.value)
+        : typeof out.value === "string"
+          ? out.value.slice(0, 200)
+          : "";
 
-    if (column && op && (op === "any" || value.trim())) {
-      values = { column: column.name, op, value };
+    // An empty value is filled from the question rather than wasting the
+    // correct column and operator the model did choose.
+    const figure =
+      op && op !== "any" && !value.trim() ? comparisonValue(question) : value;
+
+    if (column && op && (op === "any" || figure.trim())) {
+      values = { column: column.name, op, value: figure };
     } else {
       tool = "search_passages";
     }
@@ -498,7 +521,9 @@ export async function answerQuestion(
   // arithmetic wrong. Asked which agreements cost over $10,000 a month it
   // answered "$31,750.00 and $4,200.00. Both exceed $10,000 per month."
   if (lookupSummary && valueSources.length > 0) {
-    const lines = valueSources.map((source) => `- ${source.filename} — ${source.text}`);
+    const lines = valueSources.map(
+      (source) => `- ${source.filename} — ${source.text}`,
+    );
     return reply(
       [
         `${lookupSummary} Only values accepted or corrected in review are counted.`,
